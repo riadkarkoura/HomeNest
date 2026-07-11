@@ -20,14 +20,14 @@ Brand: premium, minimal, warm, helpful. Inspired by Apple simplicity and IKEA us
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 5 — Product Management Foundation  
+**Last sprint completed:** Sprint 5.1 — Add Product Studio  
 **Date of last update:** 2026-07-11
 
 ---
 
 ## Current Sprint
 
-**Sprint 5 — Product Management Foundation** ✅ COMPLETE
+**Sprint 5.1 — Add Product Studio** ✅ COMPLETE
 
 All planned work is done. The build passes. Next sprint is Sprint 6 (Authentication).
 
@@ -43,6 +43,7 @@ All planned work is done. The build passes. Next sprint is Sprint 6 (Authenticat
 | Sprint 3.3 | Supabase product queries (`src/lib/supabase/queries/products.ts`) — live DB data replaces static data |
 | Sprint 4 | Admin Dashboard: `AdminShell`, `AdminSidebar`, `AdminTopBar`, overview page, 9 stub route pages |
 | Sprint 5 | Admin Products Management UI: table, search, category/status/featured filters, row actions menu, empty/loading states, `/admin/products/new` placeholder — read-only, no CRUD/auth/mutations |
+| Sprint 5.1 | Add Product Studio at `/admin/products/new`: 8-section product creation UI (Basic Info, Pricing, Organization, Media, Product Story, SEO, disabled AI panel, disabled Publish card) — local state only, no CRUD/auth/mutations/AI wiring |
 
 ---
 
@@ -85,7 +86,7 @@ src/
 │   │   ├── layout.tsx   ← Server wrapper → <AdminShell>
 │   │   ├── page.tsx     ← Overview dashboard
 │   │   ├── products/    ← Management UI (table/search/filters), read-only — CRUD in Sprint 7
-│   │   │   └── new/     ← Placeholder ("Add Product" destination)
+│   │   │   └── new/     ← Add Product Studio (8-section form UI), no save yet — CRUD in Sprint 7
 │   │   ├── categories/  ← Stub
 │   │   ├── orders/      ← Stub
 │   │   ├── customers/   ← Stub
@@ -103,6 +104,7 @@ src/
 ├── components/
 │   ├── admin/           ← AdminShell, AdminSidebar, AdminTopBar
 │   │   └── products/    ← ProductsView, ProductsToolbar, ProductsTable, ProductActionsMenu, status.ts
+│   │       └── studio/  ← ProductStudio + StudioSection/FormField/TagInput + sections/ (Add Product Studio)
 │   ├── home/            ← Homepage sections
 │   ├── layout/          ← Navbar, Footer
 │   ├── product/         ← Product detail sections
@@ -134,7 +136,7 @@ src/
 1. **Never rebuild** what already exists. Improve, extend, or fix existing code.
 2. **Server Components by default**. Add `"use client"` only at the component that actually needs browser APIs (`useState`, `useEffect`, `usePathname`, etc.).
 3. **No authentication yet**. Sprint 6 will add it. Do not stub auth checks in components.
-4. **No CRUD yet**. Sprint 7 will add it. Admin pages are read-only (Products has a full read-only UI as of Sprint 5; the rest remain stubs).
+4. **No CRUD yet**. Sprint 7 will add it. Admin pages are read-only (Products has a full read-only UI as of Sprint 5, plus a fully-built but non-saving creation form — the Add Product Studio — as of Sprint 5.1; the rest remain stubs).
 5. **No Supabase mutations yet**. All current Supabase usage is read-only product queries.
 6. **Error handling in data queries**: all query functions `try/catch` and return `[]` or `null` on failure. The build must never fail due to DB connectivity.
 7. **`React.cache`** wraps `getProductBySlug` to deduplicate between `generateMetadata` and the page function.
@@ -166,6 +168,7 @@ src/
 |---|---|---|
 | Smart Search (Claude API) | Not started | Sprint 9 |
 | AI Studio (admin) | Stub page exists | Sprint 9+ |
+| AI Product Assistant (`/admin/products/new`) | Disabled UI panel exists (Sprint 5.1) — 4 buttons: Import from AliExpress, Generate SEO, Generate Product Story, Generate TikTok Content | Sprint 9 |
 | Product content generation | Not started | Future |
 | Personalised recommendations | Not started | Future |
 
@@ -228,7 +231,7 @@ When the user initiates Sprint 6, the work is:
 
 Do NOT start Sprint 6 work without explicit user instruction.
 
-**Sprint 7 — Admin Product CRUD** (after auth) wires the Sprint 5 Products UI (`src/components/admin/products/`) to live Supabase reads/writes, replacing the static `products` data source, the simulated loading state, the placeholder `status.ts` mapping, and the inert `ProductActionsMenu` handlers.
+**Sprint 7 — Admin Product CRUD** (after auth) wires the Sprint 5 Products UI (`src/components/admin/products/`) to live Supabase reads/writes, replacing the static `products` data source, the simulated loading state, the placeholder `status.ts` mapping, and the inert `ProductActionsMenu` handlers. It also wires the Sprint 5.1 `ProductStudio` (`src/components/admin/products/studio/`) to a real Server Action — the disabled Publish/Save as Draft/Schedule buttons go live, and the static Media dropzones are replaced with real Supabase Storage upload.
 
 ---
 

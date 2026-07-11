@@ -30,6 +30,7 @@
 - Supabase database connected for product data (Sprint 3.3)
 - Admin Dashboard foundation: sidebar, topbar, overview, all route stubs (Sprint 4)
 - Admin Products Management UI: table, search, category/status/featured filters, row actions menu, empty/loading states (Sprint 5)
+- Add Product Studio: multi-section product creation form (Basic Info, Pricing, Organization, Media, Product Story, SEO), disabled AI panel and Publish card (Sprint 5.1)
 - Zustand cart with localStorage persistence
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
@@ -117,9 +118,25 @@
 - `src/components/admin/products/ProductsTable.tsx` — responsive table (thumbnail, name, category, price, status pill, featured star, stock, actions), empty state, loading skeleton rows
 - `src/components/admin/products/ProductActionsMenu.tsx` — per-row `DropdownMenu` (View / Edit / Duplicate / Archive / Delete) — presentational only, no handlers wired
 - `src/components/admin/products/status.ts` — placeholder Active/Draft/Archived classification keyed by product id, standing in for the real `is_active`/`published_at` derivation until Sprint 7 wires it
-- `src/app/admin/products/new/page.tsx` — placeholder page ("Add Product" destination), same dashed-border stub pattern as other unbuilt admin routes
+- `src/app/admin/products/new/page.tsx` — placeholder page ("Add Product" destination), same dashed-border stub pattern as other unbuilt admin routes (replaced by the real Studio in Sprint 5.1)
 - No CRUD, no auth, no Supabase mutations — reuses `AdminShell`/`AdminSidebar`/`AdminTopBar` unchanged and the existing `products` static dataset
 - Build verified: `npm run build` passes, both new routes prerender as static pages
+
+### Sprint 5.1 — Add Product Studio
+**Status:** ✅ Complete
+
+- `src/app/admin/products/new/page.tsx` — replaces the Sprint 5 placeholder; renders `ProductStudio`
+- `src/components/admin/products/studio/ProductStudio.tsx` — client orchestrator, owns one local `ProductDraft` state object (no persistence — nothing survives navigation/reload, by design)
+- `src/components/admin/products/studio/StudioSection.tsx` / `FormField.tsx` / `TagInput.tsx` — reusable building blocks shared across all content sections (card-with-header scaffold, label+input scaffold, chip-style tag input reused by both Tags and Keywords)
+- `src/components/admin/products/studio/types.ts` — `ProductDraft` shape, `STUDIO_CATEGORIES`, `slugify()`
+- `src/components/admin/products/studio/sections/` — `BasicInfoSection` (title, auto-generated slug, short description), `PricingSection` (price, compare-at price, cost, Featured switch), `OrganizationSection` (Category/Status `Select`, reusing `PRODUCT_STATUSES` from Sprint 5's `status.ts`), `MediaSection` (static image/video dropzone placeholders, non-functional), `ProductStorySection` (Problem/Solution textareas + repeatable Benefits list), `SeoSection` (meta title/description, keywords)
+- `sections/AIAssistantPanel.tsx` — amber-tinted "AI Product Assistant / Coming in Sprint 9" card, four disabled buttons (Import from AliExpress, Generate SEO, Generate Product Story, Generate TikTok Content)
+- `sections/PublishCard.tsx` — three disabled buttons (Publish, Save as Draft, Schedule)
+- New shared primitives added to `src/components/ui/`: `select.tsx`, `switch.tsx`, `textarea.tsx` — wrap the `@base-ui/react` `select`/`switch` primitives already installed (ADR-003 pattern), reusable by future admin forms, not one-offs for this page
+- Two-column layout (`lg:grid-cols-3`): main column follows the authoring flow (Basic Info → Pricing → Product Story → SEO); sidebar holds Publish, Organization, Media, and the AI panel
+- All inputs are locally interactive (typing, toggling, tagging) — no persistence. All Save/Publish/Schedule/AI/upload actions are disabled
+- No CRUD, no auth, no Supabase mutations, no AI wiring — reuses `AdminShell` unchanged
+- Build verified: `npm run build` passes, `/admin/products/new` prerenders as a static page
 
 ---
 
@@ -146,10 +163,10 @@
 **Tasks:**
 - [ ] Wire `/admin/products` table to live, paginated Supabase reads (replacing the static `products` array and simulated loading state built in Sprint 5)
 - [ ] Add real `status`/`is_active`/`published_at` fields to `Product` and replace the placeholder mapping in `src/components/admin/products/status.ts`
-- [ ] Build the product creation form at `/admin/products/new` (replacing the placeholder page)
-- [ ] `/admin/products/[id]` — product edit form
+- [ ] Wire the Sprint 5.1 `ProductStudio` (`/admin/products/new`) to a real Server Action — Publish/Save as Draft/Schedule buttons, currently disabled, become live
+- [ ] `/admin/products/[id]` — product edit form, reusing the Sprint 5.1 Studio sections
 - [ ] Wire up `ProductActionsMenu` (View / Edit / Duplicate / Archive / Delete) to real navigation and mutations
-- [ ] Image upload to Supabase Storage (products bucket)
+- [ ] Image upload to Supabase Storage (products bucket) — replaces the Sprint 5.1 static Media dropzone placeholders
 - [ ] `revalidateTag('products')` on create/update/delete
 - [ ] Server Actions for all mutations
 - [ ] Zod validation on all form inputs
@@ -176,6 +193,7 @@
 - [ ] SmartSearchSection wired to live API
 - [ ] Search log recording to `search_logs` table
 - [ ] AI Studio search quality section
+- [ ] Wire the Sprint 5.1 `AIAssistantPanel` (`/admin/products/new`) — Import from AliExpress, Generate SEO, Generate Product Story, Generate TikTok Content, currently disabled placeholders
 
 ---
 
