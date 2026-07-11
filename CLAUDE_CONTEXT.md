@@ -20,16 +20,16 @@ Brand: premium, minimal, warm, helpful. Inspired by Apple simplicity and IKEA us
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 4 — Admin Dashboard Foundation  
+**Last sprint completed:** Sprint 5 — Product Management Foundation  
 **Date of last update:** 2026-07-11
 
 ---
 
 ## Current Sprint
 
-**Sprint 4 — Admin Dashboard Foundation** ✅ COMPLETE
+**Sprint 5 — Product Management Foundation** ✅ COMPLETE
 
-All planned work is done. The build passes. Next sprint is Sprint 5 (Authentication).
+All planned work is done. The build passes. Next sprint is Sprint 6 (Authentication).
 
 ---
 
@@ -42,6 +42,7 @@ All planned work is done. The build passes. Next sprint is Sprint 5 (Authenticat
 | Sprint 3 | Enriched product content, problem/solution/reviews story layout on product pages |
 | Sprint 3.3 | Supabase product queries (`src/lib/supabase/queries/products.ts`) — live DB data replaces static data |
 | Sprint 4 | Admin Dashboard: `AdminShell`, `AdminSidebar`, `AdminTopBar`, overview page, 9 stub route pages |
+| Sprint 5 | Admin Products Management UI: table, search, category/status/featured filters, row actions menu, empty/loading states, `/admin/products/new` placeholder — read-only, no CRUD/auth/mutations |
 
 ---
 
@@ -49,10 +50,10 @@ All planned work is done. The build passes. Next sprint is Sprint 5 (Authenticat
 
 | Sprint | Goal |
 |---|---|
-| Sprint 5 | Supabase Auth — login, register, OAuth, middleware JWT check, protected routes |
-| Sprint 6 | Admin product CRUD — create, edit, delete products; image upload to Supabase Storage |
-| Sprint 7 | Stripe payments + orders system + order confirmation email (Resend) |
-| Sprint 8 | AI Smart Search — Claude API, Upstash Redis cache, search logs |
+| Sprint 6 | Supabase Auth — login, register, OAuth, middleware JWT check, protected routes |
+| Sprint 7 | Admin product CRUD — wire the Sprint 5 UI to live Supabase reads/writes; create, edit, delete products; image upload to Supabase Storage |
+| Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) |
+| Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs |
 
 **Do NOT implement** authentication, Stripe, or CRUD until the relevant sprint begins.
 
@@ -83,7 +84,8 @@ src/
 │   ├── admin/           ← Admin dashboard (all routes stubbed; NO auth yet)
 │   │   ├── layout.tsx   ← Server wrapper → <AdminShell>
 │   │   ├── page.tsx     ← Overview dashboard
-│   │   ├── products/    ← Stub
+│   │   ├── products/    ← Management UI (table/search/filters), read-only — CRUD in Sprint 7
+│   │   │   └── new/     ← Placeholder ("Add Product" destination)
 │   │   ├── categories/  ← Stub
 │   │   ├── orders/      ← Stub
 │   │   ├── customers/   ← Stub
@@ -100,6 +102,7 @@ src/
 │
 ├── components/
 │   ├── admin/           ← AdminShell, AdminSidebar, AdminTopBar
+│   │   └── products/    ← ProductsView, ProductsToolbar, ProductsTable, ProductActionsMenu, status.ts
 │   ├── home/            ← Homepage sections
 │   ├── layout/          ← Navbar, Footer
 │   ├── product/         ← Product detail sections
@@ -130,8 +133,8 @@ src/
 
 1. **Never rebuild** what already exists. Improve, extend, or fix existing code.
 2. **Server Components by default**. Add `"use client"` only at the component that actually needs browser APIs (`useState`, `useEffect`, `usePathname`, etc.).
-3. **No authentication yet**. Sprint 5 will add it. Do not stub auth checks in components.
-4. **No CRUD yet**. Sprint 6 will add it. Admin pages are read-only stubs.
+3. **No authentication yet**. Sprint 6 will add it. Do not stub auth checks in components.
+4. **No CRUD yet**. Sprint 7 will add it. Admin pages are read-only (Products has a full read-only UI as of Sprint 5; the rest remain stubs).
 5. **No Supabase mutations yet**. All current Supabase usage is read-only product queries.
 6. **Error handling in data queries**: all query functions `try/catch` and return `[]` or `null` on failure. The build must never fail due to DB connectivity.
 7. **`React.cache`** wraps `getProductBySlug` to deduplicate between `generateMetadata` and the page function.
@@ -161,8 +164,8 @@ src/
 
 | Feature | Status | Sprint |
 |---|---|---|
-| Smart Search (Claude API) | Not started | Sprint 8 |
-| AI Studio (admin) | Stub page exists | Sprint 8+ |
+| Smart Search (Claude API) | Not started | Sprint 9 |
+| AI Studio (admin) | Stub page exists | Sprint 9+ |
 | Product content generation | Not started | Future |
 | Personalised recommendations | Not started | Future |
 
@@ -214,16 +217,18 @@ const client = createClient(
 
 ## Next Priority
 
-**Sprint 5 — Authentication**
+**Sprint 6 — Authentication**
 
-When the user initiates Sprint 5, the work is:
+When the user initiates Sprint 6, the work is:
 1. Wire `src/lib/supabase/client.ts` (browser) and `src/lib/supabase/server.ts` (server) properly
 2. Build login page (email/password + Google OAuth via `supabase.auth.signInWithOAuth`)
 3. Build `/auth/callback/route.ts` for OAuth redirect exchange
 4. Add `src/middleware.ts` to check JWT on `/admin/*`, `/checkout`, `/account/*`
 5. Show avatar + account menu in Navbar when session exists
 
-Do NOT start Sprint 5 work without explicit user instruction.
+Do NOT start Sprint 6 work without explicit user instruction.
+
+**Sprint 7 — Admin Product CRUD** (after auth) wires the Sprint 5 Products UI (`src/components/admin/products/`) to live Supabase reads/writes, replacing the static `products` data source, the simulated loading state, the placeholder `status.ts` mapping, and the inert `ProductActionsMenu` handlers.
 
 ---
 

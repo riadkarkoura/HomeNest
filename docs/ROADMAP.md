@@ -29,6 +29,7 @@
 - 8 products in the catalogue (Kitchen, Bathroom, Storage categories)
 - Supabase database connected for product data (Sprint 3.3)
 - Admin Dashboard foundation: sidebar, topbar, overview, all route stubs (Sprint 4)
+- Admin Products Management UI: table, search, category/status/featured filters, row actions menu, empty/loading states (Sprint 5)
 - Zustand cart with localStorage persistence
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
@@ -39,7 +40,7 @@
 - Payments (Stripe, PayPal)
 - Orders system
 - AI-powered search (Claude API)
-- Real admin CRUD operations
+- Real admin CRUD operations (the Products UI is read-only until Sprint 7)
 - Supabase Storage for media
 
 ---
@@ -107,11 +108,24 @@
 - Design System compliant: stone/amber palette only, no blue/green/purple
 - Build verified: 17 static pages, TypeScript check passes
 
+### Sprint 5 — Product Management Foundation
+**Status:** ✅ Complete
+
+- `src/app/admin/products/page.tsx` — page header, "Add Product" button, renders `ProductsView`
+- `src/components/admin/products/ProductsView.tsx` — client orchestrator: search/filter state, simulated loading state, derives filtered list from static `products` data
+- `src/components/admin/products/ProductsToolbar.tsx` — search input, category filter, status filter, featured toggle (`DropdownMenu`-based, pill-button style matching the storefront's `ProductsClient.tsx`)
+- `src/components/admin/products/ProductsTable.tsx` — responsive table (thumbnail, name, category, price, status pill, featured star, stock, actions), empty state, loading skeleton rows
+- `src/components/admin/products/ProductActionsMenu.tsx` — per-row `DropdownMenu` (View / Edit / Duplicate / Archive / Delete) — presentational only, no handlers wired
+- `src/components/admin/products/status.ts` — placeholder Active/Draft/Archived classification keyed by product id, standing in for the real `is_active`/`published_at` derivation until Sprint 7 wires it
+- `src/app/admin/products/new/page.tsx` — placeholder page ("Add Product" destination), same dashed-border stub pattern as other unbuilt admin routes
+- No CRUD, no auth, no Supabase mutations — reuses `AdminShell`/`AdminSidebar`/`AdminTopBar` unchanged and the existing `products` static dataset
+- Build verified: `npm run build` passes, both new routes prerender as static pages
+
 ---
 
 ## 3. Upcoming Sprints
 
-### Sprint 5 — Authentication
+### Sprint 6 — Authentication
 **Goal:** Supabase Auth integration for customer accounts
 
 **Tasks:**
@@ -126,19 +140,21 @@
 
 **Constraint:** No breaking changes to storefront. Auth must be additive.
 
-### Sprint 6 — Admin Product CRUD
+### Sprint 7 — Admin Product CRUD
 **Goal:** Admins can create, edit, and delete products from the dashboard
 
 **Tasks:**
-- [ ] `/admin/products` — paginated product table with search
-- [ ] `/admin/products/new` — product creation form
+- [ ] Wire `/admin/products` table to live, paginated Supabase reads (replacing the static `products` array and simulated loading state built in Sprint 5)
+- [ ] Add real `status`/`is_active`/`published_at` fields to `Product` and replace the placeholder mapping in `src/components/admin/products/status.ts`
+- [ ] Build the product creation form at `/admin/products/new` (replacing the placeholder page)
 - [ ] `/admin/products/[id]` — product edit form
+- [ ] Wire up `ProductActionsMenu` (View / Edit / Duplicate / Archive / Delete) to real navigation and mutations
 - [ ] Image upload to Supabase Storage (products bucket)
 - [ ] `revalidateTag('products')` on create/update/delete
 - [ ] Server Actions for all mutations
 - [ ] Zod validation on all form inputs
 
-### Sprint 7 — Payments & Orders
+### Sprint 8 — Payments & Orders
 **Goal:** End-to-end checkout with Stripe
 
 **Tasks:**
@@ -150,7 +166,7 @@
 - [ ] Order confirmation email via Resend
 - [ ] Customer order history at `/account/orders`
 
-### Sprint 8 — AI Search
+### Sprint 9 — AI Search
 **Goal:** Natural language product discovery powered by Claude
 
 **Tasks:**
