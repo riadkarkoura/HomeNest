@@ -195,5 +195,49 @@
 
 ---
 
-*Document maintained by: Lead Product Engineer*  
-*Last updated: 2026-07-11*
+## ADR-013 — RLS-gated admin writes, no service-role key
+**Date:** 2026-07-12
+**Status:** Accepted
+
+**Decision:** Product Create (Sprint 6) never uses `SUPABASE_SERVICE_ROLE_KEY`. The Create Server Action uses the same cookie-based `@supabase/ssr` client as everything else (`src/lib/supabase/server.ts`), and writes are authorized entirely through explicit RLS policies (`products_staff_insert`, `products_staff_delete`, `seo_metadata_staff_insert` — all `get_my_role() IN ('staff','admin')`, migration 005).
+
+**Reason:** Migration 004 and `docs/DATABASE.md` §19 originally assumed "Admin → full access (uses service_role key server-side)" — i.e. admin writes were meant to bypass RLS entirely via the service_role key. The user explicitly ruled that out for this sprint: the browser must never have any path to a service-role-backed request, and the real authorization boundary should be RLS evaluated against a real authenticated session, not a bypass credential. This is a stricter posture than originally designed, kept intentionally rather than reverted.
+
+**Consequence:** Every future admin write path (bulk import, AI-generated content approval, etc.) must add its own explicit staff/admin RLS policy the same way — the service_role assumption in migration 004's header comment no longer holds for anything built through a Server Action. `docs/DATABASE.md` §19 has been annotated accordingly.
+
+**Alternatives considered:**
+- Service-role key in a Server Action (original plan) — rejected per explicit instruction; also weaker in principle, since it bypasses RLS entirely rather than being checked by it.
+- A dedicated non-`service_role` Postgres role for the app server — unnecessary complexity for a single Server Action; RLS + `authenticated` role already gives the same guarantee.
+
+---
+
+## ADR-014 — Minimal admin-only auth bridge ahead of full Authentication sprint
+**Date:** 2026-07-12
+**Status:** Accepted
+
+**Decision:** A small, deliberately incomplete auth slice was built to unblock Product Create, since ADR-013 requires a real authenticated staff/admin session to exist: `src/proxy.ts` (Next.js 16's renamed `middleware.ts`, protecting `/admin/:path*` — optimistic session check only), `src/lib/auth/dal.ts` (`verifyAdminSession`), and `src/app/admin/login/{page,actions}.tsx` (email/password sign-in via `supabase.auth.signInWithPassword`, non-admin accounts are signed out immediately). No registration, no password reset, no OAuth, no customer-facing auth, no profile/account pages.
+
+**Reason:** RLS policies in ADR-013 are meaningless without a session to check `get_my_role()` against, and none could exist — `/login` was a static UI stub and no admin `profiles` row existed. This is the minimum slice that makes ADR-013 actually work, scoped tightly per the user's explicit instruction not to build the complete authentication system yet.
+
+**Consequence:** `/login` (the customer-facing storefront page with Google OAuth and a register toggle) was left untouched — it's scaffolding for the real, future Authentication sprint (ROADMAP), not repurposed for admin. `/admin/login` is a separate, purpose-built route. The future Authentication sprint should extend `src/lib/supabase/{client,server,middleware}.ts` and `src/lib/auth/dal.ts` rather than replace them — they're written to be reusable (e.g. `verifyAdminSession`'s pattern generalizes to a future `verifySession` for customers).
+
+**Alternatives considered:**
+- Defer Product Create until the full Authentication sprint — rejected; the user explicitly chose to build CRUD first (see ROADMAP renumbering) and only needs an admin session, not the full customer auth surface.
+- Service-role key instead of any auth — rejected per ADR-013.
+
+---
+
+## ADR-015 — No RPC/transaction function for Product Create's two-table write
+**Date:** 2026-07-12
+**Status:** Accepted
+
+**Decision:** `createProduct` performs two plain Supabase inserts (`products`, then `seo_metadata`) via the normal client, not a Postgres RPC function. If the second insert fails, the action compensates with a `DELETE` on the just-created `products` row (supported by the new `products_staff_delete` RLS policy) rather than relying on a single database transaction.
+
+**Reason:** Explicit user instruction: keep the implementation simple and aligned with the current architecture (no existing RPCs in this codebase); introduce a real transaction only when multi-table atomicity actually becomes necessary (e.g. AI import, bulk import).
+
+**Consequence:** There's a narrow window between the two inserts where a crash (not just an error — actual process/connectivity loss) could leave an orphaned `products` row with no compensating delete. Acceptable at this feature's volume (single admin, occasional creates); logged loudly server-side if it happens. Revisit with a `SECURITY INVOKER` Postgres function (preserves RLS, doesn't bypass it) if a future sprint needs true atomicity across more than two tables.
+
+---
+
+*Document maintained by: Lead Product Engineer*
+*Last updated: 2026-07-12*

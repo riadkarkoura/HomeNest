@@ -12,12 +12,13 @@ interface Props {
   onChange: (patch: Partial<ProductDraft>) => void;
   slugTouched: boolean;
   onSlugTouched: () => void;
+  errors?: Partial<Record<keyof ProductDraft, string>>;
 }
 
-export default function BasicInfoSection({ draft, onChange, slugTouched, onSlugTouched }: Props) {
+export default function BasicInfoSection({ draft, onChange, slugTouched, onSlugTouched, errors }: Props) {
   return (
     <StudioSection icon={Info} title="Basic Information" description="The essentials every product needs.">
-      <FormField label="Product title" htmlFor="title" required>
+      <FormField label="Product Name" htmlFor="title" required error={errors?.title}>
         <Input
           id="title"
           value={draft.title}
@@ -29,7 +30,12 @@ export default function BasicInfoSection({ draft, onChange, slugTouched, onSlugT
         />
       </FormField>
 
-      <FormField label="Slug" htmlFor="slug" hint="Used in the product URL — auto-generated from the title until edited.">
+      <FormField
+        label="Slug"
+        htmlFor="slug"
+        hint="Used in the product URL — auto-generated from the title until edited."
+        error={errors?.slug}
+      >
         <div className="flex items-center rounded-lg border border-stone-200 pl-2.5 text-sm text-stone-400 transition-colors focus-within:border-stone-400">
           <span className="whitespace-nowrap">/products/</span>
           <Input

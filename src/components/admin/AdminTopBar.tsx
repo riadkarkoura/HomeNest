@@ -1,7 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { signOutAdmin } from "@/app/admin/login/actions";
 
 const PAGE_TITLES: Record<string, string> = {
   "/admin": "Overview",
@@ -50,12 +57,24 @@ export default function AdminTopBar({ onMenuClick }: Props) {
       </div>
 
       {/* Admin avatar */}
-      <div
-        aria-hidden="true"
-        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-600 text-xs font-semibold text-white"
-      >
-        A
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              aria-label="Admin account menu"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-600 text-xs font-semibold text-white"
+            />
+          }
+        >
+          A
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem variant="destructive" onClick={() => signOutAdmin()}>
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }

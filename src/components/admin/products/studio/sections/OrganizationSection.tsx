@@ -11,12 +11,13 @@ import { PRODUCT_STATUSES } from "../../status";
 interface Props {
   draft: ProductDraft;
   onChange: (patch: Partial<ProductDraft>) => void;
+  errors?: Partial<Record<keyof ProductDraft, string>>;
 }
 
-export default function OrganizationSection({ draft, onChange }: Props) {
+export default function OrganizationSection({ draft, onChange, errors }: Props) {
   return (
     <StudioSection icon={FolderTree} title="Organization" description="How this product is grouped and found.">
-      <FormField label="Category" htmlFor="category">
+      <FormField label="Category" htmlFor="category" error={errors?.category}>
         <Select value={draft.category} onValueChange={(category) => onChange({ category: category as string })}>
           <SelectTrigger id="category">
             <SelectValue />

@@ -6,17 +6,19 @@ import { Textarea } from "@/components/ui/textarea";
 import StudioSection from "../StudioSection";
 import FormField from "../FormField";
 import TagInput from "../TagInput";
+import CharacterCounter from "../CharacterCounter";
 import type { ProductDraft } from "../types";
 
 interface Props {
   draft: ProductDraft;
   onChange: (patch: Partial<ProductDraft>) => void;
+  errors?: Partial<Record<keyof ProductDraft, string>>;
 }
 
-export default function SeoSection({ draft, onChange }: Props) {
+export default function SeoSection({ draft, onChange, errors }: Props) {
   return (
     <StudioSection icon={Search} title="SEO" description="How this product appears in search results.">
-      <FormField label="Meta title" htmlFor="metaTitle" hint={`${draft.metaTitle.length}/60 characters`}>
+      <FormField label="Meta title" htmlFor="metaTitle" error={errors?.metaTitle}>
         <Input
           id="metaTitle"
           value={draft.metaTitle}
@@ -24,9 +26,10 @@ export default function SeoSection({ draft, onChange }: Props) {
           placeholder={draft.title || "Silicone Sink Splash Guard | HomeNest"}
           maxLength={60}
         />
+        <CharacterCounter current={draft.metaTitle.length} max={60} />
       </FormField>
 
-      <FormField label="Meta description" htmlFor="metaDescription" hint={`${draft.metaDescription.length}/160 characters`}>
+      <FormField label="Meta description" htmlFor="metaDescription" error={errors?.metaDescription}>
         <Textarea
           id="metaDescription"
           value={draft.metaDescription}
@@ -35,6 +38,7 @@ export default function SeoSection({ draft, onChange }: Props) {
           rows={2}
           maxLength={160}
         />
+        <CharacterCounter current={draft.metaDescription.length} max={160} />
       </FormField>
 
       <FormField label="Keywords" htmlFor="keywords">

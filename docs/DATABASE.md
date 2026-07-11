@@ -334,6 +334,7 @@ The central table. All other catalogue tables reference it.
 | `is_active` | `boolean` | DEFAULT `true` | Inactive = hidden from storefront |
 | `sort_order` | `integer` | DEFAULT `0` | Admin-controlled display order |
 | `tags` | `text[]` | DEFAULT `'{}'` | Keyword tags for search and filtering |
+| `benefits` | `jsonb` | NOT NULL DEFAULT `'[]'` | Array of `{ id, text }` — the Product Story "Benefits" list from the Admin Studio. Added in migration 005 (Sprint 6) |
 | `published_at` | `timestamptz` | | NULL = draft. Set on first publish |
 | `deleted_at` | `timestamptz` | DEFAULT NULL | Soft delete |
 | `created_at` | `timestamptz` | DEFAULT `now()` | |
@@ -1041,6 +1042,7 @@ SEO and Open Graph metadata for any entity: products, categories, or static page
 | `twitter_description` | `text` | | |
 | `twitter_image_url` | `text` | | |
 | `canonical_url` | `text` | | Canonical URL if different from page URL |
+| `keywords` | `text[]` | NOT NULL DEFAULT `'{}'` | Admin-entered SEO keywords (Studio's "Keywords" tag input). Added in migration 005 (Sprint 6) |
 | `no_index` | `boolean` | DEFAULT `false` | Adds `noindex` meta tag |
 | `structured_data` | `jsonb` | | JSON-LD schema.org markup (Product, BreadcrumbList, etc.) |
 | `hreflang` | `jsonb` | | `{"en": "/path", "fr": "/fr/path"}` for i18n |
@@ -1333,12 +1335,14 @@ Staff              → extended read access for customer support
 Admin              → full access (uses service_role key server-side)
 ```
 
+**Deviation (Sprint 6, migration 005):** Product Create does not use the service_role key at all — see ADR-013. `products` and `seo_metadata` gained explicit `get_my_role() IN ('staff','admin')` write policies (INSERT on both, DELETE on `products` for compensating rollback) instead of relying on the service_role bypass above. Any future admin write path built the same way (Server Action + cookie-based client) needs the same treatment — the "Admin → service_role bypass" assumption only holds for code that actually uses the service_role key.
+
 ### Policy Summary
 
 | Table | Anonymous | Authenticated user | Staff | Admin |
 |---|---|---|---|---|
 | `categories` | SELECT | SELECT | SELECT | ALL |
-| `products` | SELECT (active only) | SELECT | SELECT | ALL |
+| `products` | SELECT (active only) | SELECT | SELECT + INSERT + DELETE¹ | ALL |
 | `product_variants` | SELECT | SELECT | SELECT | ALL |
 | `product_images` | SELECT | SELECT | SELECT | ALL |
 | `product_videos` | SELECT | SELECT | SELECT | ALL |
@@ -1359,7 +1363,7 @@ Admin              → full access (uses service_role key server-side)
 | `search_logs` | INSERT only | INSERT only | SELECT | ALL |
 | `product_embeddings` | SELECT | SELECT | SELECT | ALL |
 | `recommendations` | NONE | SELECT own | NONE | ALL |
-| `seo_metadata` | SELECT | SELECT | SELECT | ALL |
+| `seo_metadata` | SELECT | SELECT | SELECT + INSERT¹ | ALL |
 | `page_views` | INSERT only | INSERT only | SELECT | ALL |
 | `product_events` | INSERT only | INSERT only | SELECT | ALL |
 | `conversion_events` | INSERT only | INSERT only | SELECT | ALL |
@@ -1369,6 +1373,8 @@ Admin              → full access (uses service_role key server-side)
 | `audit_log` | NONE | NONE | SELECT | SELECT |
 | `ai_generated_content` | NONE | NONE | SELECT | ALL |
 | `media` | SELECT | NONE | SELECT | ALL |
+
+¹ Added in migration 005 (Sprint 6), for the Product Create Server Action — see ADR-013. `WITH CHECK (public.get_my_role() IN ('staff', 'admin'))`, no service_role key involved.
 
 ### Key Policies (Detail)
 

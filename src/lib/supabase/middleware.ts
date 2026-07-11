@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Called from src/middleware.ts to refresh the user's session on every request.
+// Called from src/proxy.ts to refresh the user's session on every request.
 // Do NOT add business logic between createServerClient and getUser().
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -28,7 +28,9 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Refresh the session — must not be removed or moved.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  return supabaseResponse;
+  return { response: supabaseResponse, user };
 }

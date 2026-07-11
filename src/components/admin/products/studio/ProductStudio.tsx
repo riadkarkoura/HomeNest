@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
+import { motion } from "framer-motion";
+import { stagger, fadeUp } from "@/lib/motion";
+import ProductQualitySection from "./sections/ProductQualitySection";
 import BasicInfoSection from "./sections/BasicInfoSection";
 import PricingSection from "./sections/PricingSection";
 import OrganizationSection from "./sections/OrganizationSection";
@@ -10,34 +13,76 @@ import SeoSection from "./sections/SeoSection";
 import AIAssistantPanel from "./sections/AIAssistantPanel";
 import PublishCard from "./sections/PublishCard";
 import { createEmptyDraft, type ProductDraft } from "./types";
+import { createProduct, type CreateProductState } from "@/app/admin/products/new/actions";
 
-export default function ProductStudio() {
-  const [draft, setDraft] = useState<ProductDraft>(createEmptyDraft);
-  const [slugTouched, setSlugTouched] = useState(false);
+interface Props {
+  // Lets a future Edit Product page reuse this exact component tree,
+  // pre-filled instead of blank. Unused today — Create always omits it.
+  initialDraft?: Partial<ProductDraft>;
+}
+
+const initialActionState: CreateProductState = { ok: false };
+
+export default function ProductStudio({ initialDraft }: Props) {
+  const [draft, setDraft] = useState<ProductDraft>(() => ({ ...createEmptyDraft(), ...initialDraft }));
+  const [slugTouched, setSlugTouched] = useState(Boolean(initialDraft?.slug));
+  const [state, createProductAction, pending] = useActionState(createProduct, initialActionState);
 
   const update = (patch: Partial<ProductDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
   };
 
+  // Passed to PublishCard as `formAction` prop values, not called here —
+  // React invokes them (inside its own transition) when the matching
+  // submit button triggers a real form submission. Calling
+  // createProductAction() directly from a plain onClick throws ("called
+  // outside of a transition"), since only the form/button `action`
+  // mechanism auto-wraps an async useActionState dispatch.
+  const onSaveDraft = () => createProductAction({ ...draft, status: "Draft" });
+  const onPublish = () => createProductAction({ ...draft, status: "Active" });
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
-        <BasicInfoSection
-          draft={draft}
-          onChange={update}
-          slugTouched={slugTouched}
-          onSlugTouched={() => setSlugTouched(true)}
-        />
-        <PricingSection draft={draft} onChange={update} />
-        <ProductStorySection draft={draft} onChange={update} />
-        <SeoSection draft={draft} onChange={update} />
+    <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-6">
+      <motion.div variants={fadeUp}>
+        <ProductQualitySection />
+      </motion.div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <motion.div variants={fadeUp}>
+            <BasicInfoSection
+              draft={draft}
+              onChange={update}
+              slugTouched={slugTouched}
+              onSlugTouched={() => setSlugTouched(true)}
+              errors={state.errors}
+            />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <PricingSection draft={draft} onChange={update} errors={state.errors} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <ProductStorySection draft={draft} onChange={update} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <SeoSection draft={draft} onChange={update} errors={state.errors} />
+          </motion.div>
+        </div>
+        <div className="space-y-6">
+          <motion.div variants={fadeUp}>
+            <PublishCard onSaveDraft={onSaveDraft} onPublish={onPublish} pending={pending} message={state.message} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <OrganizationSection draft={draft} onChange={update} errors={state.errors} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <MediaSection />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <AIAssistantPanel />
+          </motion.div>
+        </div>
       </div>
-      <div className="space-y-6">
-        <PublishCard />
-        <OrganizationSection draft={draft} onChange={update} />
-        <MediaSection />
-        <AIAssistantPanel />
-      </div>
-    </div>
+    </motion.div>
   );
 }

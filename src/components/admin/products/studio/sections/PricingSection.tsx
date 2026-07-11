@@ -11,6 +11,7 @@ import type { ProductDraft } from "../types";
 interface Props {
   draft: ProductDraft;
   onChange: (patch: Partial<ProductDraft>) => void;
+  errors?: Partial<Record<keyof ProductDraft, string>>;
 }
 
 function PriceInput({
@@ -42,14 +43,19 @@ function PriceInput({
   );
 }
 
-export default function PricingSection({ draft, onChange }: Props) {
+export default function PricingSection({ draft, onChange, errors }: Props) {
   return (
     <StudioSection icon={Tag} title="Pricing" description="What customers pay, and what it costs you.">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-        <FormField label="Price" htmlFor="price" required>
+        <FormField label="Price" htmlFor="price" required error={errors?.price}>
           <PriceInput id="price" value={draft.price} onChange={(price) => onChange({ price })} placeholder="24.00" />
         </FormField>
-        <FormField label="Compare at price" htmlFor="compareAtPrice" hint="Shown as a strikethrough.">
+        <FormField
+          label="Compare Price"
+          htmlFor="compareAtPrice"
+          hint="Shown as a strikethrough."
+          error={errors?.compareAtPrice}
+        >
           <PriceInput
             id="compareAtPrice"
             value={draft.compareAtPrice}
@@ -57,7 +63,7 @@ export default function PricingSection({ draft, onChange }: Props) {
             placeholder="34.00"
           />
         </FormField>
-        <FormField label="Cost" htmlFor="cost" hint="Admin-only. Never shown to customers.">
+        <FormField label="Cost" htmlFor="cost" hint="Admin-only. Never shown to customers." error={errors?.cost}>
           <PriceInput id="cost" value={draft.cost} onChange={(cost) => onChange({ cost })} placeholder="9.50" />
         </FormField>
       </div>

@@ -21,7 +21,7 @@
 
 **Version:** 0.1.0  
 **Status:** Phase 0 — Frontend Foundation complete; Phase 1 (Backend) in progress  
-**Date:** 2026-07-11
+**Date:** 2026-07-12
 
 ### What's live
 
@@ -30,18 +30,20 @@
 - Supabase database connected for product data (Sprint 3.3)
 - Admin Dashboard foundation: sidebar, topbar, overview, all route stubs (Sprint 4)
 - Admin Products Management UI: table, search, category/status/featured filters, row actions menu, empty/loading states (Sprint 5)
-- Add Product Studio: multi-section product creation form (Basic Info, Pricing, Organization, Media, Product Story, SEO), disabled AI panel and Publish card (Sprint 5.1)
+- Add Product Studio: 8-section product creation form (Basic Info, Pricing, Organization, Media, Product Story, SEO, Product Quality, AI Assistant) with mount animation, disabled AI panel (6 actions) and Publish card (Sprint 5.1)
+- **Product Create**, wired to real Supabase writes, RLS-gated, no service-role key (Sprint 6) — requires the one-time manual admin-account step described under Sprint 6 below
+- **Minimal admin-only sign-in** at `/admin/login`, protecting `/admin/*` (Sprint 6 — temporary bridge, not full Authentication)
 - Zustand cart with localStorage persistence
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
 
 ### What's not yet live
 
-- Authentication (Supabase Auth)
+- Full Authentication (customer accounts, OAuth, register, password reset) — the storefront `/login` page is still a UI stub
+- Product edit/delete, live products table, image upload, quality scoring (Sprint 6.1)
 - Payments (Stripe, PayPal)
 - Orders system
 - AI-powered search (Claude API)
-- Real admin CRUD operations (the Products UI is read-only until Sprint 7)
 - Supabase Storage for media
 
 ---
@@ -129,47 +131,63 @@
 - `src/components/admin/products/studio/ProductStudio.tsx` — client orchestrator, owns one local `ProductDraft` state object (no persistence — nothing survives navigation/reload, by design)
 - `src/components/admin/products/studio/StudioSection.tsx` / `FormField.tsx` / `TagInput.tsx` — reusable building blocks shared across all content sections (card-with-header scaffold, label+input scaffold, chip-style tag input reused by both Tags and Keywords)
 - `src/components/admin/products/studio/types.ts` — `ProductDraft` shape, `STUDIO_CATEGORIES`, `slugify()`
-- `src/components/admin/products/studio/sections/` — `BasicInfoSection` (title, auto-generated slug, short description), `PricingSection` (price, compare-at price, cost, Featured switch), `OrganizationSection` (Category/Status `Select`, reusing `PRODUCT_STATUSES` from Sprint 5's `status.ts`), `MediaSection` (static image/video dropzone placeholders, non-functional), `ProductStorySection` (Problem/Solution textareas + repeatable Benefits list), `SeoSection` (meta title/description, keywords)
-- `sections/AIAssistantPanel.tsx` — amber-tinted "AI Product Assistant / Coming in Sprint 9" card, four disabled buttons (Import from AliExpress, Generate SEO, Generate Product Story, Generate TikTok Content)
-- `sections/PublishCard.tsx` — three disabled buttons (Publish, Save as Draft, Schedule)
+- `src/components/admin/products/studio/sections/` — `BasicInfoSection` (Product Name, auto-generated slug, short description), `PricingSection` (Price, Compare Price, Cost, Featured switch), `OrganizationSection` (Category/Status `Select`, reusing `PRODUCT_STATUSES` from Sprint 5's `status.ts`), `MediaSection` (static image/video dropzone placeholders, non-functional), `ProductStorySection` (Problem/Solution textareas + repeatable Benefits list), `SeoSection` (meta title/description, keywords), `ProductQualitySection` (read-only score strip)
+- `sections/AIAssistantPanel.tsx` — amber-tinted "AI Product Assistant / Coming in Sprint 9" card, six disabled buttons (Import from AliExpress, Generate Product Story, Generate SEO, Generate FAQs, Generate TikTok Content, Generate Product Images) in a 2-column tile grid
+- `sections/PublishCard.tsx` — three disabled buttons in order: Draft, Schedule, Publish
+- `sections/ProductQualitySection.tsx` — full-width strip above the two-column layout, five read-only `ScoreCard` tiles (Title, Description, SEO, Images, Overall). Placeholder-only ("Not yet scored") — no scoring logic, per explicit "no calculations yet" instruction; reuses the Overview dashboard's stat-card visual pattern rather than inventing a new one
+- `studio/ScoreCard.tsx` — reusable placeholder score tile, used 5× by `ProductQualitySection`
+- `studio/CharacterCounter.tsx` — reusable live counter with color state (stone → amber-600 near limit → destructive at limit), extracted from SEO's inline hint text so it's a real shared component
 - New shared primitives added to `src/components/ui/`: `select.tsx`, `switch.tsx`, `textarea.tsx` — wrap the `@base-ui/react` `select`/`switch` primitives already installed (ADR-003 pattern), reusable by future admin forms, not one-offs for this page
-- Two-column layout (`lg:grid-cols-3`): main column follows the authoring flow (Basic Info → Pricing → Product Story → SEO); sidebar holds Publish, Organization, Media, and the AI panel
-- All inputs are locally interactive (typing, toggling, tagging) — no persistence. All Save/Publish/Schedule/AI/upload actions are disabled
+- Two-column layout (`lg:grid-cols-3`): main column follows the authoring flow (Basic Info → Pricing → Product Story → SEO); sidebar holds Publish, Organization, Media, and the AI panel; Product Quality spans full width above both
+- Mount-time entrance animation added — `stagger`/`fadeUp` from `src/lib/motion.ts` (no new easing curves), the first use of Framer Motion anywhere in `/admin`
+- `ProductStudio` accepts an optional `initialDraft?: Partial<ProductDraft>` prop (unused today, defaults to nothing) so the future Edit Product page can reuse the entire component tree pre-filled instead of duplicating it
+- All inputs are locally interactive (typing, toggling, tagging) — no persistence. All Draft/Schedule/Publish/AI/upload actions are disabled
 - No CRUD, no auth, no Supabase mutations, no AI wiring — reuses `AdminShell` unchanged
-- Build verified: `npm run build` passes, `/admin/products/new` prerenders as a static page
+- Build verified: `npm run build` passes (TypeScript + ESLint clean), `/admin/products/new` prerenders as a static page
 
----
+### Sprint 6 — Product Create (CRUD) + minimal admin auth bridge
+**Status:** ✅ Complete (code) — ⚠️ requires one manual step before it's usable
 
-## 3. Upcoming Sprints
+Sprints 6 and 7 were swapped from the original plan at explicit user instruction: Product Create shipped before full Authentication. Three approval rounds shaped the final architecture — see `docs/DECISIONS.md` ADR-013/014/015 for the full reasoning.
 
-### Sprint 6 — Authentication
-**Goal:** Supabase Auth integration for customer accounts
+- **No service-role key anywhere.** `SUPABASE_SERVICE_ROLE_KEY` is not used by the app. The Create Server Action uses the same cookie-based `@supabase/ssr` client (`src/lib/supabase/server.ts`) as everything else.
+- **Migration `20260712000001_product_create_write_access.sql`** — adds `products.benefits jsonb` and `seo_metadata.keywords text[]` (columns the Sprint 5.1 Studio UI already collected but had nowhere to persist), plus three RLS policies: `products_staff_insert`, `products_staff_delete`, `seo_metadata_staff_insert` — all `get_my_role() IN ('staff','admin')`. Applied to the linked Supabase project.
+- **Minimal admin-only auth bridge** (temporary — not the full Authentication sprint): `src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts`; protects `/admin/:path*`, optimistic session check only), `src/lib/auth/dal.ts` (`verifyAdminSession`, the reusable seam for future auth work), `src/app/admin/login/{page.tsx,actions.ts}` (email/password sign-in only — no OAuth, no register, no password reset; non-admin accounts are signed out immediately on login attempt). The existing storefront `/login` page (Google OAuth, register toggle) was deliberately left untouched for the real Sprint 7 to wire up.
+- **`src/app/admin/products/new/actions.ts`** — `createProduct` Server Action: Zod `safeParse` (not `parse`, so field errors return cleanly to the UI), `verifyAdminSession()`, category name → `category_id` lookup, maps the Studio's Draft/Active/Archived status to `is_active`/`published_at`, inserts `products` then conditionally `seo_metadata`. **No RPC/transaction** (explicit instruction — keep it simple, revisit with a `SECURITY INVOKER` Postgres function only if a future sprint needs true multi-table atomicity, e.g. AI import or bulk import). If the `seo_metadata` insert fails after `products` succeeded, the action compensates with a `DELETE` on the just-created product row.
+- `FormField.tsx` gained an `error?: string` prop; `PublishCard`'s Draft/Publish buttons are now live (Schedule remains disabled, unchanged).
 
-**Tasks:**
-- [ ] Supabase Auth client wiring (browser + server + middleware)
-- [ ] Login page: email/password + Google OAuth
-- [ ] Register page
-- [ ] `/auth/callback` route for OAuth redirect
-- [ ] `src/middleware.ts` — JWT verification on `/admin/*` and `/checkout`
-- [ ] Session-aware Navbar (show avatar + account menu when logged in)
-- [ ] Protected account area `/account/` (profile, orders, wishlist)
-- [ ] Cart merge on login (localStorage → server)
+**⚠️ Manual step required before this works end-to-end:** no admin account exists yet.
+1. Supabase Dashboard → Authentication → Users → Add User (email + password).
+2. In the SQL editor, run: `UPDATE public.profiles SET role = 'admin' WHERE email = 'you@example.com';` (the `handle_new_user()` trigger already created the `profiles` row with `role='user'`).
+3. Sign in at `/admin/login`.
 
-**Constraint:** No breaking changes to storefront. Auth must be additive.
+Until step 1–2 are done, every sign-in attempt at `/admin/login` will correctly fail — that's RLS and the auth bridge working as designed, not a bug.
 
-### Sprint 7 — Admin Product CRUD
-**Goal:** Admins can create, edit, and delete products from the dashboard
+### Sprint 6.1 — Rest of Product CRUD
+**Goal:** Complete admin product management — edit, delete, live list, images, scoring
 
 **Tasks:**
 - [ ] Wire `/admin/products` table to live, paginated Supabase reads (replacing the static `products` array and simulated loading state built in Sprint 5)
-- [ ] Add real `status`/`is_active`/`published_at` fields to `Product` and replace the placeholder mapping in `src/components/admin/products/status.ts`
-- [ ] Wire the Sprint 5.1 `ProductStudio` (`/admin/products/new`) to a real Server Action — Publish/Save as Draft/Schedule buttons, currently disabled, become live
-- [ ] `/admin/products/[id]` — product edit form, reusing the Sprint 5.1 Studio sections
-- [ ] Wire up `ProductActionsMenu` (View / Edit / Duplicate / Archive / Delete) to real navigation and mutations
-- [ ] Image upload to Supabase Storage (products bucket) — replaces the Sprint 5.1 static Media dropzone placeholders
-- [ ] `revalidateTag('products')` on create/update/delete
-- [ ] Server Actions for all mutations
-- [ ] Zod validation on all form inputs
+- [ ] Replace the placeholder mapping in `src/components/admin/products/status.ts` with the real `is_active`/`published_at` derivation (Sprint 6's `statusToColumns` in `actions.ts` establishes the mapping direction; this is the reverse — DB → UI status label)
+- [ ] Replace `ProductQualitySection`'s placeholder score tiles with real computed scores (Title/Description/SEO/Images/Overall)
+- [ ] `/admin/products/[id]` — product edit form, reusing the Sprint 5.1/6 Studio sections via `initialDraft`
+- [ ] Wire up `ProductActionsMenu` (View / Edit / Duplicate / Archive / Delete) to real navigation and mutations — same RLS-gated Server Action pattern as Create (ADR-013), no service-role key
+- [ ] Image upload to Supabase Storage (products bucket) — replaces the static Media dropzone placeholders; bucket → `media` row → `product_images` row per `docs/DATABASE.md` §7
+- [ ] `revalidatePath`/`revalidateTag` on update/delete (Create already does this for `/admin/products` and `/products`)
+
+### Sprint 7 — Full Authentication
+**Goal:** Customer accounts, on top of the Sprint 6 admin-only bridge
+
+**Tasks:**
+- [ ] Wire the existing storefront `/login` page (already has the Google OAuth button and register toggle UI) to `supabase.auth.signInWithOAuth` and a real register Server Action
+- [ ] `/auth/callback` route for OAuth redirect
+- [ ] Extend `src/proxy.ts` (not a new file — see ADR-014) to also gate `/checkout` and `/account/*` for customer sessions
+- [ ] Session-aware Navbar (show avatar + account menu when logged in)
+- [ ] Protected account area `/account/` (profile, orders, wishlist)
+- [ ] Cart merge on login (localStorage → server)
+- [ ] Password reset flow
+
+**Constraint:** No breaking changes to storefront. Auth must be additive. Extend `src/lib/auth/dal.ts` and `src/lib/supabase/{client,server,middleware}.ts` rather than duplicating them.
 
 ### Sprint 8 — Payments & Orders
 **Goal:** End-to-end checkout with Stripe
@@ -193,7 +211,7 @@
 - [ ] SmartSearchSection wired to live API
 - [ ] Search log recording to `search_logs` table
 - [ ] AI Studio search quality section
-- [ ] Wire the Sprint 5.1 `AIAssistantPanel` (`/admin/products/new`) — Import from AliExpress, Generate SEO, Generate Product Story, Generate TikTok Content, currently disabled placeholders
+- [ ] Wire the Sprint 5.1 `AIAssistantPanel` (`/admin/products/new`) — Import from AliExpress, Generate Product Story, Generate SEO, Generate FAQs, Generate TikTok Content, Generate Product Images, currently disabled placeholders
 
 ---
 
@@ -226,5 +244,5 @@ HomeNest's mission is to become one of the best Smart Home Solutions ecommerce e
 
 ---
 
-*Last updated: 2026-07-11*  
+*Last updated: 2026-07-12*  
 *Maintained by: Lead Product Engineer*

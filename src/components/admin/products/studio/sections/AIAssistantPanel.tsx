@@ -1,10 +1,12 @@
-import { Sparkles, Download, Search, BookOpen, Video } from "lucide-react";
+import { Sparkles, Download, Search, BookOpen, Video, HelpCircle, Camera } from "lucide-react";
 
 const ACTIONS = [
   { icon: Download, label: "Import from AliExpress" },
-  { icon: Search, label: "Generate SEO" },
   { icon: BookOpen, label: "Generate Product Story" },
+  { icon: Search, label: "Generate SEO" },
+  { icon: HelpCircle, label: "Generate FAQs" },
   { icon: Video, label: "Generate TikTok Content" },
+  { icon: Camera, label: "Generate Product Images" },
 ];
 
 export default function AIAssistantPanel() {
@@ -22,16 +24,16 @@ export default function AIAssistantPanel() {
       <p className="mt-4 text-xs leading-relaxed text-stone-500">
         Generate SEO, product story copy, and social content from a single source product — powered by Claude.
       </p>
-      <div className="mt-5 grid grid-cols-1 gap-2">
+      <div className="mt-5 grid grid-cols-2 gap-2">
         {ACTIONS.map(({ icon: Icon, label }) => (
           <button
             key={label}
             type="button"
             disabled
-            className="flex items-center gap-2.5 rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-stone-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex flex-col items-start gap-2 rounded-lg border border-stone-200 bg-white px-3 py-3 text-left text-xs font-medium text-stone-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon className="h-4 w-4 text-stone-400" />
-            {label}
+            <span className="leading-snug">{label}</span>
           </button>
         ))}
       </div>

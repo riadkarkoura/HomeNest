@@ -20,16 +20,16 @@ Brand: premium, minimal, warm, helpful. Inspired by Apple simplicity and IKEA us
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 5.1 — Add Product Studio  
-**Date of last update:** 2026-07-11
+**Last sprint completed:** Sprint 6 — Product Create (CRUD) + minimal admin auth bridge  
+**Date of last update:** 2026-07-12
 
 ---
 
 ## Current Sprint
 
-**Sprint 5.1 — Add Product Studio** ✅ COMPLETE
+**Sprint 6 — Product Create (CRUD) + minimal admin auth bridge** ✅ COMPLETE (code) — ⚠️ one manual step outstanding
 
-All planned work is done. The build passes. Next sprint is Sprint 6 (Authentication).
+Sprints 6 and 7 were swapped from the original plan: Product Create shipped before full Authentication, at the user's explicit instruction. The build passes. **Before this is live, you must create one Supabase Auth user and promote it to `role='admin'`** — see `docs/ROADMAP.md` Sprint 6 for the exact steps. Until then, `/admin/login` will correctly reject every sign-in attempt (no admin account exists yet), which is the intended, secure default — not a bug.
 
 ---
 
@@ -43,7 +43,8 @@ All planned work is done. The build passes. Next sprint is Sprint 6 (Authenticat
 | Sprint 3.3 | Supabase product queries (`src/lib/supabase/queries/products.ts`) — live DB data replaces static data |
 | Sprint 4 | Admin Dashboard: `AdminShell`, `AdminSidebar`, `AdminTopBar`, overview page, 9 stub route pages |
 | Sprint 5 | Admin Products Management UI: table, search, category/status/featured filters, row actions menu, empty/loading states, `/admin/products/new` placeholder — read-only, no CRUD/auth/mutations |
-| Sprint 5.1 | Add Product Studio at `/admin/products/new`: 8-section product creation UI (Basic Info, Pricing, Organization, Media, Product Story, SEO, disabled AI panel, disabled Publish card) — local state only, no CRUD/auth/mutations/AI wiring |
+| Sprint 5.1 | Add Product Studio at `/admin/products/new`: 8-section product creation UI (Basic Info, Pricing, Organization, Media, Product Story, SEO, Product Quality score strip, disabled AI panel with 6 actions, disabled Publish card) — mount-time motion, `initialDraft` prop future-proofed for Edit Product — local state only, no CRUD/auth/mutations/AI wiring |
+| Sprint 6 | **Product Create (CRUD)**, wired to real Supabase writes via a Server Action (`src/app/admin/products/new/actions.ts`) — no `SUPABASE_SERVICE_ROLE_KEY` anywhere, authorization is entirely RLS (`get_my_role() IN ('staff','admin')`, migration `20260712000001`). Includes a **temporary, minimal admin-only auth bridge** (`src/proxy.ts`, `src/lib/auth/dal.ts`, `/admin/login`) — NOT the full Authentication sprint; see ADR-013/014/015 in `docs/DECISIONS.md`. |
 
 ---
 
@@ -51,12 +52,12 @@ All planned work is done. The build passes. Next sprint is Sprint 6 (Authenticat
 
 | Sprint | Goal |
 |---|---|
-| Sprint 6 | Supabase Auth — login, register, OAuth, middleware JWT check, protected routes |
-| Sprint 7 | Admin product CRUD — wire the Sprint 5 UI to live Supabase reads/writes; create, edit, delete products; image upload to Supabase Storage |
+| Sprint 6.1 | Rest of Product CRUD — wire `/admin/products` table to live Supabase reads (replacing the static list + `status.ts` placeholder), edit and delete products, image upload to Supabase Storage, real `ProductQualitySection` scoring |
+| Sprint 7 | Full Authentication — customer accounts, register, OAuth, password reset, session-aware Navbar, protected `/account` area. Extends (does not replace) the Sprint 6 auth bridge files. |
 | Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs |
 
-**Do NOT implement** authentication, Stripe, or CRUD until the relevant sprint begins.
+**Do NOT implement** Stripe, or AI search until the relevant sprint begins. Sprint 6 only covers Product **Create** — edit/delete, image upload, and real quality scoring remain Sprint 6.1.
 
 ---
 
@@ -104,7 +105,7 @@ src/
 ├── components/
 │   ├── admin/           ← AdminShell, AdminSidebar, AdminTopBar
 │   │   └── products/    ← ProductsView, ProductsToolbar, ProductsTable, ProductActionsMenu, status.ts
-│   │       └── studio/  ← ProductStudio + StudioSection/FormField/TagInput + sections/ (Add Product Studio)
+│   │       └── studio/  ← ProductStudio + StudioSection/FormField/TagInput/ScoreCard/CharacterCounter + sections/ (Add Product Studio)
 │   ├── home/            ← Homepage sections
 │   ├── layout/          ← Navbar, Footer
 │   ├── product/         ← Product detail sections
@@ -168,7 +169,7 @@ src/
 |---|---|---|
 | Smart Search (Claude API) | Not started | Sprint 9 |
 | AI Studio (admin) | Stub page exists | Sprint 9+ |
-| AI Product Assistant (`/admin/products/new`) | Disabled UI panel exists (Sprint 5.1) — 4 buttons: Import from AliExpress, Generate SEO, Generate Product Story, Generate TikTok Content | Sprint 9 |
+| AI Product Assistant (`/admin/products/new`) | Disabled UI panel exists (Sprint 5.1) — 6 buttons: Import from AliExpress, Generate Product Story, Generate SEO, Generate FAQs, Generate TikTok Content, Generate Product Images | Sprint 9 |
 | Product content generation | Not started | Future |
 | Personalised recommendations | Not started | Future |
 
@@ -220,19 +221,14 @@ const client = createClient(
 
 ## Next Priority
 
-**Sprint 6 — Authentication**
+**Sprint 6.1 — Rest of Product CRUD**
 
-When the user initiates Sprint 6, the work is:
-1. Wire `src/lib/supabase/client.ts` (browser) and `src/lib/supabase/server.ts` (server) properly
-2. Build login page (email/password + Google OAuth via `supabase.auth.signInWithOAuth`)
-3. Build `/auth/callback/route.ts` for OAuth redirect exchange
-4. Add `src/middleware.ts` to check JWT on `/admin/*`, `/checkout`, `/account/*`
-5. Show avatar + account menu in Navbar when session exists
+Wires the remaining Sprint 5 Products UI (`src/components/admin/products/`) to live Supabase reads/writes: replaces the static `products` data source, the simulated loading state, and the placeholder `status.ts` mapping with the real `is_active`/`published_at` model (see `docs/DATABASE.md` and `createProduct`'s `statusToColumns` mapping in `src/app/admin/products/new/actions.ts` for the pattern). Wires up `ProductActionsMenu` (View/Edit/Duplicate/Archive/Delete). `ProductQualitySection`'s placeholder tiles get real scoring. Static Media dropzones become real Supabase Storage upload (bucket `products` → `media` row → `product_images` row, per `docs/DATABASE.md` §7). `/admin/products/[id]/edit` reuses `ProductStudio` via its `initialDraft` prop. All of it goes through the same RLS-gated Server Action pattern established in Sprint 6 (ADR-013) — no service-role key.
 
-Do NOT start Sprint 6 work without explicit user instruction.
+**Sprint 7 — Full Authentication** extends, not replaces, the Sprint 6 auth bridge (`src/proxy.ts`, `src/lib/auth/dal.ts`, `src/lib/supabase/{client,server,middleware}.ts`): customer accounts, register, Google OAuth (`supabase.auth.signInWithOAuth`), `/auth/callback/route.ts`, password reset, session-aware Navbar, protected `/account/*` area, cart merge on login. The existing storefront `/login` page (Google OAuth button, register toggle) was left as-is in Sprint 6 specifically so this sprint can wire it up rather than rebuild it.
 
-**Sprint 7 — Admin Product CRUD** (after auth) wires the Sprint 5 Products UI (`src/components/admin/products/`) to live Supabase reads/writes, replacing the static `products` data source, the simulated loading state, the placeholder `status.ts` mapping, and the inert `ProductActionsMenu` handlers. It also wires the Sprint 5.1 `ProductStudio` (`src/components/admin/products/studio/`) to a real Server Action — the disabled Publish/Save as Draft/Schedule buttons go live, and the static Media dropzones are replaced with real Supabase Storage upload.
+Do NOT start Sprint 7 work without explicit user instruction.
 
 ---
 
-*Last updated: 2026-07-11*
+*Last updated: 2026-07-12*
