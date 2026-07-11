@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { products } from "@/lib/products";
+import { getProducts } from "@/lib/supabase/queries/products";
 import ProductCard from "@/components/shop/ProductCard";
 import ProductsClient from "./ProductsClient";
 
@@ -14,14 +14,7 @@ interface Props {
 
 export default async function ProductsPage({ searchParams }: Props) {
   const { category = "All", sort = "default" } = await searchParams;
-
-  let filtered = category === "All"
-    ? products
-    : products.filter((p) => p.category === category);
-
-  if (sort === "price-asc") filtered = [...filtered].sort((a, b) => a.price - b.price);
-  if (sort === "price-desc") filtered = [...filtered].sort((a, b) => b.price - a.price);
-  if (sort === "rating") filtered = [...filtered].sort((a, b) => b.rating - a.rating);
+  const filtered = await getProducts({ category, sort });
 
   return (
     <div className="bg-stone-50 min-h-screen">

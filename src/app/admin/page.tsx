@@ -27,7 +27,7 @@ const stats = [
     change: "+8.2%",
     up: true,
     icon: ShoppingCart,
-    color: "bg-blue-50 text-blue-600",
+    color: "bg-stone-100 text-stone-600",
   },
   {
     label: "Products",
@@ -35,7 +35,7 @@ const stats = [
     change: "+2",
     up: true,
     icon: Package,
-    color: "bg-green-50 text-green-600",
+    color: "bg-amber-100 text-amber-700",
   },
   {
     label: "Customers",
@@ -43,27 +43,57 @@ const stats = [
     change: "-3.1%",
     up: false,
     icon: Users,
-    color: "bg-purple-50 text-purple-600",
+    color: "bg-stone-100 text-stone-700",
   },
 ];
 
 const recentOrders = [
-  { id: "#ORD-001", customer: "Sarah Chen", product: "Nordic Linen Sofa", amount: "$1,299", status: "Delivered" },
-  { id: "#ORD-002", customer: "Marcus Lee", product: "Marble Coffee Table", amount: "$649", status: "Shipped" },
-  { id: "#ORD-003", customer: "Emma Wilson", product: "Japandi Bed Frame", amount: "$899", status: "Processing" },
-  { id: "#ORD-004", customer: "David Park", product: "Bouclé Accent Chair", amount: "$549", status: "Pending" },
-  { id: "#ORD-005", customer: "Olivia Torres", product: "Walnut Dining Table", amount: "$1,849", status: "Delivered" },
+  {
+    id: "#HN-20260711-0001",
+    customer: "Sarah Chen",
+    product: "Silicone Sink Splash Guard",
+    amount: "$24.00",
+    status: "Delivered",
+  },
+  {
+    id: "#HN-20260711-0002",
+    customer: "Marcus Lee",
+    product: "Adjustable Shower Caddy",
+    amount: "$34.00",
+    status: "Shipped",
+  },
+  {
+    id: "#HN-20260711-0003",
+    customer: "Emma Wilson",
+    product: "Under-Sink Pull-Out Rack",
+    amount: "$58.00",
+    status: "Processing",
+  },
+  {
+    id: "#HN-20260711-0004",
+    customer: "David Park",
+    product: "Bamboo Drawer Organizer Set",
+    amount: "$38.00",
+    status: "Pending",
+  },
+  {
+    id: "#HN-20260711-0005",
+    customer: "Olivia Torres",
+    product: "Foldable Storage Cube Set",
+    amount: "$48.00",
+    status: "Delivered",
+  },
 ];
 
 const statusColors: Record<string, string> = {
-  Delivered: "bg-green-100 text-green-700",
-  Shipped: "bg-blue-100 text-blue-700",
-  Processing: "bg-amber-100 text-amber-700",
+  Delivered: "bg-stone-900 text-white",
+  Shipped: "bg-amber-100 text-amber-700",
+  Processing: "bg-amber-50 text-amber-600",
   Pending: "bg-stone-100 text-stone-600",
-  Cancelled: "bg-red-100 text-red-700",
+  Cancelled: "bg-stone-200 text-stone-600",
 };
 
-const topProducts = products
+const topProducts = [...products]
   .sort((a, b) => b.reviewCount - a.reviewCount)
   .slice(0, 5);
 
@@ -74,7 +104,7 @@ export default function AdminDashboard() {
       <div>
         <p className="text-xs uppercase tracking-widest text-amber-600 mb-1">Dashboard</p>
         <h1 className="text-2xl font-semibold text-stone-900">Overview</h1>
-        <p className="text-sm text-stone-500 mt-0.5">Welcome back. Here's what's happening.</p>
+        <p className="text-sm text-stone-500 mt-0.5">Welcome back. Here&apos;s what&apos;s happening.</p>
       </div>
 
       {/* Stat cards */}
@@ -88,8 +118,16 @@ export default function AdminDashboard() {
               </div>
             </div>
             <p className="text-3xl font-semibold text-stone-900">{value}</p>
-            <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${up ? "text-green-600" : "text-red-500"}`}>
-              {up ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+            <div
+              className={`flex items-center gap-1 mt-2 text-xs font-medium ${
+                up ? "text-stone-700" : "text-stone-400"
+              }`}
+            >
+              {up ? (
+                <ArrowUpRight className="h-3.5 w-3.5 text-amber-600" />
+              ) : (
+                <ArrowDownRight className="h-3.5 w-3.5" />
+              )}
               {change} vs last month
             </div>
           </div>
@@ -101,7 +139,9 @@ export default function AdminDashboard() {
         <div className="xl:col-span-2 bg-white rounded-2xl border border-stone-100 overflow-hidden">
           <div className="flex items-center justify-between p-6 border-b border-stone-100">
             <h2 className="font-semibold text-stone-900">Recent Orders</h2>
-            <button className="text-xs text-amber-600 hover:underline font-medium">View all</button>
+            <button className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors">
+              View all
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -124,7 +164,11 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-stone-900">{order.amount}</td>
                     <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[order.status]}`}>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          statusColors[order.status]
+                        }`}
+                      >
                         {order.status}
                       </span>
                     </td>
@@ -139,17 +183,21 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
           <div className="flex items-center justify-between p-6 border-b border-stone-100">
             <h2 className="font-semibold text-stone-900">Top Products</h2>
-            <Eye className="h-4 w-4 text-stone-400" />
+            <Eye className="h-4 w-4 text-stone-400" aria-hidden="true" />
           </div>
           <div className="divide-y divide-stone-50">
             {topProducts.map((product, i) => (
               <div key={product.id} className="flex items-center gap-3 px-6 py-4">
-                <span className="text-xs font-semibold text-stone-400 w-5">{i + 1}</span>
+                <span className="text-xs font-semibold text-stone-400 w-5 flex-shrink-0">
+                  {i + 1}
+                </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-stone-900 truncate">{product.name}</p>
                   <p className="text-xs text-stone-400">{product.reviewCount} reviews</p>
                 </div>
-                <p className="text-sm font-semibold text-stone-900">${product.price.toLocaleString()}</p>
+                <p className="text-sm font-semibold text-stone-900 flex-shrink-0">
+                  ${product.price.toLocaleString()}
+                </p>
               </div>
             ))}
           </div>

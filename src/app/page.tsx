@@ -1,4 +1,4 @@
-import { getFeaturedProducts } from "@/lib/products";
+import { getFeaturedProducts } from "@/lib/supabase/queries/products";
 import HeroSection from "@/components/home/HeroSection";
 import SmartSearchSection from "@/components/home/SmartSearchSection";
 import ShopByProblemSection from "@/components/home/ShopByProblemSection";
@@ -10,8 +10,8 @@ import CraftSection from "@/components/home/CraftSection";
 import TestimonialSection from "@/components/home/TestimonialSection";
 import NewsletterSection from "@/components/home/NewsletterSection";
 
-export default function HomePage() {
-  const featured = getFeaturedProducts();
+export default async function HomePage() {
+  const featured = await getFeaturedProducts();
 
   return (
     <>
