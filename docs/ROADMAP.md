@@ -33,6 +33,8 @@
 - Add Product Studio: 8-section product creation form (Basic Info, Pricing, Organization, Media, Product Story, SEO, Product Quality, AI Assistant) with mount animation, disabled AI panel (6 actions) and Publish card (Sprint 5.1)
 - **Product Create**, wired to real Supabase writes, RLS-gated, no service-role key (Sprint 6) — requires the one-time manual admin-account step described under Sprint 6 below
 - **Minimal admin-only sign-in** at `/admin/login`, protecting `/admin/*` (Sprint 6 — temporary bridge, not full Authentication)
+- **Live, paginated, filterable Products list** at `/admin/products` (Sprint 6.1, partial) — real Supabase reads, no static data
+- **Product Edit** at `/admin/products/[id]/edit` (Sprint 7.1) — reuses the Add Product Studio entirely
 - Zustand cart with localStorage persistence
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
@@ -40,7 +42,7 @@
 ### What's not yet live
 
 - Full Authentication (customer accounts, OAuth, register, password reset) — the storefront `/login` page is still a UI stub
-- Product edit/delete, live products table, image upload, quality scoring (Sprint 6.1)
+- Product delete, image upload, quality scoring (Sprint 6.1, remaining)
 - Payments (Stripe, PayPal)
 - Orders system
 - AI-powered search (Claude API)
@@ -163,17 +165,37 @@ Sprints 6 and 7 were swapped from the original plan at explicit user instruction
 
 Until step 1–2 are done, every sign-in attempt at `/admin/login` will correctly fail — that's RLS and the auth bridge working as designed, not a bug.
 
-### Sprint 6.1 — Rest of Product CRUD
-**Goal:** Complete admin product management — edit, delete, live list, images, scoring
+### Sprint 6.1 (partial) — Live Products list
+**Status:** ✅ Complete — list/read only; delete, image upload, and quality scoring remain (see Sprint 6.1 remaining, below)
+
+- `src/lib/supabase/queries/admin-products.ts` (new) — `getAdminProducts()` (paginated, filtered, sorted, RLS-gated via `products_staff_select_all`, browser client) and `getAdminCategories()`
+- `src/components/admin/products/status.ts` — `getProductStatus()` now derives Active/Draft/Archived from real `is_active`/`published_at`, replacing the hardcoded id-keyed placeholder map from Sprint 5
+- `src/components/admin/products/ProductsView.tsx` rewritten for live, debounced, filter-triggered fetching with real database pagination (`ProductsPagination.tsx`, new)
+- `src/types/index.ts` — `Product` gained optional `isActive`/`publishedAt` fields, backward compatible with the static catalogue (`src/lib/products.ts`, still used by the Admin Overview page) and the storefront query module
+- `src/app/admin/products/page.tsx` — dropped the static `products` import/prop
+
+### Sprint 7.1 — Edit Product
+**Status:** ✅ Complete
+
+Shipped ahead of Sprint 7 (Full Authentication) — same kind of out-of-order numbering as the Sprint 6/7 swap documented above; the label reflects when the work happened, not a fixed plan.
+
+- `/admin/products/[id]/edit` (new dynamic route) — reuses `ProductStudio` entirely via the `initialDraft` prop built for this exact purpose in Sprint 5.1, plus a new `action` prop (defaults to `createProduct`) so the same component tree submits to either Create or Edit with no UI duplication
+- `src/lib/supabase/queries/admin-product.ts` (new, singular — deliberately separate from the browser-client `admin-products.ts`, so a `"use client"` import of that module never risks pulling `next/headers` into a browser bundle) — `getAdminProductForEdit()` fetches the product plus its `seo_metadata` row and maps both to `Partial<ProductDraft>`, reusing `getProductStatus()` rather than a third copy of status derivation
+- `src/app/admin/products/[id]/edit/actions.ts` (new) — `updateProduct(id, prevState, draft)`, wired via `updateProduct.bind(null, id)` so it matches the `(prevState, draft)` shape `useActionState` expects from `ProductStudio`; `.update()` on `products`, `.upsert()` on `seo_metadata` (its `UNIQUE(entity_type, entity_id)` constraint makes upsert the natural fit for "may or may not already have SEO content")
+- `src/components/admin/products/studio/validation.ts` (new) — `ProductDraftSchema`, `statusToColumns`, `zodErrorsToFieldErrors` extracted out of `new/actions.ts` so Create and Edit validate identically instead of via two hand-kept-in-sync copies; `new/actions.ts` is behaviorally unchanged, only its schema's *location* moved
+- Migration `20260712000002_product_edit_write_access.sql` — `products_staff_update` and `seo_metadata_staff_update` RLS policies, same `get_my_role() IN ('staff','admin')` pattern as ADR-013. Neither existed before this sprint — editing was blocked at the database regardless of application code (see ADR-016)
+- `ProductActionsMenu`'s Edit item now links to the new route; View/Duplicate/Archive/Delete remain presentational (Sprint 6.1 remaining, below)
+- No rollback-on-partial-failure for the `seo_metadata` write, unlike Create's compensating delete — the product row already existed before the edit started, so there's no equivalent "delete what didn't exist a moment ago." A failed SEO write returns an honest partial-success message instead (see ADR-016)
+
+## 3. Upcoming Sprints
+
+### Sprint 6.1 (remaining) — Delete, images, scoring
+**Goal:** The rest of admin product management — list and edit are done (see Sprint History)
 
 **Tasks:**
-- [ ] Wire `/admin/products` table to live, paginated Supabase reads (replacing the static `products` array and simulated loading state built in Sprint 5)
-- [ ] Replace the placeholder mapping in `src/components/admin/products/status.ts` with the real `is_active`/`published_at` derivation (Sprint 6's `statusToColumns` in `actions.ts` establishes the mapping direction; this is the reverse — DB → UI status label)
 - [ ] Replace `ProductQualitySection`'s placeholder score tiles with real computed scores (Title/Description/SEO/Images/Overall)
-- [ ] `/admin/products/[id]` — product edit form, reusing the Sprint 5.1/6 Studio sections via `initialDraft`
-- [ ] Wire up `ProductActionsMenu` (View / Edit / Duplicate / Archive / Delete) to real navigation and mutations — same RLS-gated Server Action pattern as Create (ADR-013), no service-role key
+- [ ] Wire the remaining `ProductActionsMenu` items (View / Duplicate / Archive / Delete) — same RLS-gated Server Action pattern as Create/Edit (ADR-013), no service-role key; Delete needs its own RLS `DELETE` policy (the one that exists today is scoped narrowly to Create's compensating rollback, not general use)
 - [ ] Image upload to Supabase Storage (products bucket) — replaces the static Media dropzone placeholders; bucket → `media` row → `product_images` row per `docs/DATABASE.md` §7
-- [ ] `revalidatePath`/`revalidateTag` on update/delete (Create already does this for `/admin/products` and `/products`)
 
 ### Sprint 7 — Full Authentication
 **Goal:** Customer accounts, on top of the Sprint 6 admin-only bridge

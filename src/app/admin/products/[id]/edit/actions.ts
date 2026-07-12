@@ -11,7 +11,8 @@ import {
   type ProductFormState,
 } from "@/components/admin/products/studio/validation";
 
-export async function createProduct(
+export async function updateProduct(
+  id: string,
   _prevState: ProductFormState,
   draft: ProductDraft
 ): Promise<ProductFormState> {
@@ -47,9 +48,9 @@ export async function createProduct(
     };
   }
 
-  const { data: product, error: productError } = await supabase
+  const { error: productError } = await supabase
     .from("products")
-    .insert({
+    .update({
       slug: data.slug,
       name: data.title,
       description: data.shortDescription || null,
@@ -64,39 +65,47 @@ export async function createProduct(
       solution_body: data.solution || null,
       ...statusToColumns(data.status),
     })
-    .select("id")
-    .single();
+    .eq("id", id);
 
-  if (productError || !product) {
-    if (productError?.code === "23505") {
+  if (productError) {
+    if (productError.code === "23505") {
       return {
         ok: false,
         errors: { slug: "That URL slug is already taken — try another." },
         message: "Fix the highlighted fields and try again.",
       };
     }
-    console.error("[createProduct] products insert failed", productError);
-    return { ok: false, message: "Something went wrong saving this product. Nothing was published." };
+    console.error("[updateProduct] products update failed", productError);
+    return { ok: false, message: "Something went wrong saving this product. Nothing was changed." };
   }
 
   const hasSeoContent = Boolean(data.metaTitle || data.metaDescription || data.keywords.length > 0);
 
   if (hasSeoContent) {
-    const { error: seoError } = await supabase.from("seo_metadata").insert({
-      entity_type: "product",
-      entity_id: product.id,
-      title: data.metaTitle || null,
-      description: data.metaDescription || null,
-      keywords: data.keywords,
-    });
+    const { error: seoError } = await supabase
+      .from("seo_metadata")
+      .upsert(
+        {
+          entity_type: "product",
+          entity_id: id,
+          title: data.metaTitle || null,
+          description: data.metaDescription || null,
+          keywords: data.keywords,
+        },
+        { onConflict: "entity_type,entity_id" }
+      );
 
     if (seoError) {
-      console.error("[createProduct] seo_metadata insert failed, rolling back product", product.id, seoError);
-      const { error: rollbackError } = await supabase.from("products").delete().eq("id", product.id);
-      if (rollbackError) {
-        console.error("[createProduct] rollback delete failed — orphaned product row", product.id, rollbackError);
-      }
-      return { ok: false, message: "Something went wrong saving this product. Nothing was published." };
+      // Unlike Create, there's no cheap rollback here — the product row
+      // already existed before this edit, so "undo" would mean restoring
+      // its exact previous values, not deleting a row that didn't exist a
+      // moment ago. Report the true partial state instead of pretending
+      // to revert it.
+      console.error("[updateProduct] seo_metadata upsert failed", id, seoError);
+      return {
+        ok: false,
+        message: "Product details were saved, but SEO information failed to save — please try again.",
+      };
     }
   }
 

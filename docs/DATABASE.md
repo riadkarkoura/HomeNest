@@ -1335,14 +1335,14 @@ Staff              → extended read access for customer support
 Admin              → full access (uses service_role key server-side)
 ```
 
-**Deviation (Sprint 6, migration 005):** Product Create does not use the service_role key at all — see ADR-013. `products` and `seo_metadata` gained explicit `get_my_role() IN ('staff','admin')` write policies (INSERT on both, DELETE on `products` for compensating rollback) instead of relying on the service_role bypass above. Any future admin write path built the same way (Server Action + cookie-based client) needs the same treatment — the "Admin → service_role bypass" assumption only holds for code that actually uses the service_role key.
+**Deviation (Sprint 6/7.1, migrations 005–006):** Product Create and Edit do not use the service_role key at all — see ADR-013/ADR-016. `products` and `seo_metadata` gained explicit `get_my_role() IN ('staff','admin')` write policies (INSERT on both — migration 005; UPDATE on both — migration 006; DELETE on `products`, scoped to Create's compensating rollback — migration 005) instead of relying on the service_role bypass above. Any future admin write path built the same way (Server Action + cookie-based client) needs the same treatment — the "Admin → service_role bypass" assumption only holds for code that actually uses the service_role key.
 
 ### Policy Summary
 
 | Table | Anonymous | Authenticated user | Staff | Admin |
 |---|---|---|---|---|
 | `categories` | SELECT | SELECT | SELECT | ALL |
-| `products` | SELECT (active only) | SELECT | SELECT + INSERT + DELETE¹ | ALL |
+| `products` | SELECT (active only) | SELECT | SELECT + INSERT + UPDATE² + DELETE¹ | ALL |
 | `product_variants` | SELECT | SELECT | SELECT | ALL |
 | `product_images` | SELECT | SELECT | SELECT | ALL |
 | `product_videos` | SELECT | SELECT | SELECT | ALL |
@@ -1363,7 +1363,7 @@ Admin              → full access (uses service_role key server-side)
 | `search_logs` | INSERT only | INSERT only | SELECT | ALL |
 | `product_embeddings` | SELECT | SELECT | SELECT | ALL |
 | `recommendations` | NONE | SELECT own | NONE | ALL |
-| `seo_metadata` | SELECT | SELECT | SELECT + INSERT¹ | ALL |
+| `seo_metadata` | SELECT | SELECT | SELECT + INSERT¹ + UPDATE² | ALL |
 | `page_views` | INSERT only | INSERT only | SELECT | ALL |
 | `product_events` | INSERT only | INSERT only | SELECT | ALL |
 | `conversion_events` | INSERT only | INSERT only | SELECT | ALL |
@@ -1375,6 +1375,8 @@ Admin              → full access (uses service_role key server-side)
 | `media` | SELECT | NONE | SELECT | ALL |
 
 ¹ Added in migration 005 (Sprint 6), for the Product Create Server Action — see ADR-013. `WITH CHECK (public.get_my_role() IN ('staff', 'admin'))`, no service_role key involved.
+
+² Added in migration 006 (Sprint 7.1), for the Product Edit Server Action (`updateProduct`) — see ADR-016. Same pattern, same posture: `WITH CHECK (public.get_my_role() IN ('staff', 'admin'))`, no service_role key.
 
 ### Key Policies (Detail)
 

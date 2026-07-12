@@ -239,5 +239,23 @@
 
 ---
 
+## ADR-016 — Product Edit: RLS UPDATE policies, upsert for SEO, no rollback
+**Date:** 2026-07-12
+**Status:** Accepted
+
+**Decision:** Sprint 7.1 (Edit Product) extends the ADR-013 posture rather than introducing a new one: migration 006 adds `products_staff_update` and `seo_metadata_staff_update` (same `get_my_role() IN ('staff','admin')` shape as migration 005's INSERT policies), and `updateProduct` uses `.update()` on `products` plus `.upsert()` (keyed on `seo_metadata`'s existing `UNIQUE(entity_type, entity_id)` constraint) rather than a manual insert-or-update branch. Unlike `createProduct`, there is no compensating action if the `seo_metadata` write fails after the `products` update succeeds — the action returns an explicit partial-success message instead.
+
+**Reason:** No UPDATE policy existed on either table before this sprint — editing was blocked at the database regardless of what application code attempted, a gap the Sprint 6.1/6.1.1 architecture review had already flagged. `.upsert()` was chosen over Create's insert-only pattern because Edit has a real case Create doesn't: a product that was created without SEO content might be edited to add some, or vice versa — upsert covers "row may or may not already exist" in one call instead of a fetch-then-branch.
+
+The no-rollback decision is a deliberate asymmetry with ADR-015, not an oversight: Create's compensating delete works because a failed create can simply remove a row that didn't exist a moment ago. Edit's product row already existed before the edit began — "rolling back" would mean restoring its exact prior field values, which requires snapshotting the whole row first, a materially bigger feature than this sprint's scope. Reporting the true partial state honestly was judged better than a misleading full-success or full-failure message.
+
+**Consequence:** A failed `seo_metadata` write during an edit leaves the `products` row's new values saved with stale (pre-edit) SEO data — the returned message says so explicitly rather than implying the whole save failed. Revisit with a real "previous value" snapshot (or a `SECURITY INVOKER` transaction function) if this proves confusing in practice, or once a broader undo/audit-trail feature exists that would need the same snapshot data anyway.
+
+**Alternatives considered:**
+- A single Postgres function wrapping both writes in a transaction — rejected for the same reason as ADR-015 (no RPC until multi-table atomicity is actually needed); revisit together if a future sprint adds one for either Create or Edit.
+- Manual "select existing seo_metadata row, then insert or update" branch instead of `.upsert()` — rejected as unnecessary complexity given the unique constraint already exists to make upsert atomic and correct.
+
+---
+
 *Document maintained by: Lead Product Engineer*
 *Last updated: 2026-07-12*

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Eye, Pencil, Copy, Archive, Trash2, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
@@ -10,7 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Product } from "@/types";
 
-// All actions are presentational only — CRUD lands in a future sprint.
+// View / Duplicate / Archive / Delete remain presentational — CRUD for
+// those lands in a future sprint. Edit is wired (Sprint 7.1).
 export default function ProductActionsMenu({ product }: { product: Product }) {
   return (
     <DropdownMenu>
@@ -29,7 +31,7 @@ export default function ProductActionsMenu({ product }: { product: Product }) {
           <Eye className="h-4 w-4" />
           View
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem render={<Link href={`/admin/products/${product.id}/edit`} />}>
           <Pencil className="h-4 w-4" />
           Edit
         </DropdownMenuItem>
