@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { products } from "@/lib/products";
 import ProductsView from "@/components/admin/products/ProductsView";
 
 export const metadata: Metadata = { title: "Products" };
@@ -24,7 +23,7 @@ export default function AdminProductsPage() {
         </Link>
       </div>
 
-      <ProductsView products={products} />
+      <ProductsView />
     </div>
   );
 }

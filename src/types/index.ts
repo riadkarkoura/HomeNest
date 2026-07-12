@@ -20,6 +20,10 @@ export interface Product {
   // Enrichment — used by ProductCard, admin dashboard
   badge?: "Bestseller" | "New" | "Editor's Pick" | "Sale";
   problemSolved?: string;
+  // Admin-only — populated by src/lib/supabase/queries/admin-products.ts,
+  // absent on the static catalogue (src/lib/products.ts) and storefront reads.
+  isActive?: boolean;
+  publishedAt?: string | null;
 }
 
 export interface CartItem {
