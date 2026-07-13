@@ -294,7 +294,7 @@ The no-rollback decision is a deliberate asymmetry with ADR-015, not an oversigh
 
 ---
 
-## ADR-018 — Sprint 6.1 (remaining): ProductActionsMenu wiring reuses existing RLS, no new migration
+## ADR-019 — Sprint 6.1 (remaining): ProductActionsMenu wiring reuses existing RLS, no new migration
 **Date:** 2026-07-12
 **Status:** Accepted
 
