@@ -33,6 +33,53 @@ route scaffolding for `/checkout` and `/account/*` is in place via `src/proxy.ts
 exist behind it yet — that's Sprint 7.1. No account dashboard, orders, wishlist, or cart merge
 were built this sprint, per explicit scope.
 
+## Sprint 7.0 Verification (2026-07-13)
+
+Verification-only pass, no code changes, against the live Supabase project via the dev server:
+
+- **Login — PASS.** Negative path confirmed repeatedly: wrong credentials → clean "Invalid email
+  or password." from `login()` in `src/app/login/actions.ts`, no crash, server logs show the
+  Server Action executing against live Supabase each time. Positive path (successful sign-in)
+  could not be independently re-exercised this session — no confirmed-working test account was
+  available (see Registration below) — but the code path is identical in shape to the
+  already-verified `getUser()`/`signOut()` calls, which do reach the live project correctly.
+- **Registration — PASS (with a noted blocker).** Form toggle, validation, and the `signup()`
+  Server Action all confirmed working end-to-end against live Supabase, including the
+  Suspense/interactivity bug found and fixed earlier this sprint (see below). Every registration
+  attempt this session returned either a Supabase-side error (invalid email domain, or "email
+  rate limit exceeded" once several attempts had been made) or the code's honest fallback message
+  ("Account created. Check your email to confirm, then sign in.") — meaning `signUp()` never
+  returned an active session in any attempt made tonight. `supabase/config.toml` sets
+  `enable_confirmations = false`, so this may indicate the **linked remote Supabase project has
+  email confirmation enabled**, unlike local config — worth checking in the Supabase Dashboard.
+  Not fixed here per explicit "verification only" instruction.
+- **Google OAuth — BLOCKED (expected, external).** Clicking "Continue with Google" briefly shows
+  "Redirecting…" then silently reverts with no navigation and no visible error — confirmed via
+  console/network inspection that `signInWithOAuth()` resolves without throwing, but no
+  authorize-URL redirect occurs. Root cause: `supabase/config.toml`'s `[auth.external.google]` has
+  `enabled = false` with empty credentials (see Known Issues). This is the same category of
+  manual, external setup step Sprint 6 needed for the admin account — not an app-code defect.
+  Note: the silent (no error message) failure mode is a genuine UX gap, but fixing it would be an
+  improvement beyond this verification pass, so it was only recorded, not addressed.
+- **Protected routes — PASS.** Unauthenticated requests to `/account`, `/checkout`, and `/admin`
+  all correctly redirect (`/account` and `/checkout` → `/login`, `/admin` → `/admin/login`,
+  confirming Sprint 7.0's `src/proxy.ts` changes didn't regress the existing admin gate). The
+  authenticated "does NOT redirect" branch could not be independently re-exercised this session
+  for the same reason as Login/Logout below.
+- **Logout — NOT INDEPENDENTLY VERIFIED THIS SESSION.** No live authenticated session could be
+  obtained (see Registration blocker above), so the Navbar's Sign out action could not be clicked
+  through. The handler is a direct `supabase.auth.signOut()` + redirect, the same shape as the
+  already-shipped and working `signOutAdmin` in `src/app/admin/login/actions.ts` — verified by
+  code review, not by live click-through.
+- **Production build — PASS.** `npm run build` succeeds cleanly (TypeScript + ESLint via Next's
+  build-in check), 31 routes generated, no errors.
+
+**Root blocker for the unverified items:** Supabase's auth email rate limit (`email_sent = 2`/hour
+in local config; the linked remote project has its own, likely similarly low, limit) was hit
+after the several registration attempts made across this sprint's implementation and verification
+work, and no pre-existing customer test account with known credentials exists. Re-verify Login
+(positive path) and Logout once the rate limit clears or a test account is available.
+
 ## Current Branch
 main
 
@@ -56,7 +103,13 @@ postponed here, pending a schema decision — no `cart`/`cart_items` table exist
   "Continue with Google" works end-to-end — same category of one-time manual step as Sprint 6's
   admin account creation. Email/password registration, login, and password reset were verified
   end-to-end against the live Supabase project this session; Google OAuth's code path was wired
-  but could not be exercised past the redirect without that manual step.
+  but could not be exercised past the redirect without that manual step. Confirmed during Sprint
+  7.0 verification: with the provider disabled, the button click fails **silently** (no error
+  shown to the user) — worth a small UX fix in a future pass, not addressed here.
+- Supabase auth email rate limit was hit during Sprint 7.0 verification (several registration
+  attempts in one session) — blocks further registration testing until it clears. No customer
+  test account with known credentials currently exists, so Login (positive path) and Logout
+  could not be independently re-verified this session — see "Sprint 7.0 Verification" above.
 
 ## Do Not Change
 - Design system
