@@ -28,18 +28,18 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 7.0 — Authentication Foundation.  
+**Last sprint completed:** Sprint 7.1 — User Area.  
 **Date of last update:** 2026-07-13
 
 ---
 
 ## Current Sprint
 
-**Sprint 7.0 — Authentication Foundation** ✅ COMPLETE
+**Sprint 7.1 — User Area** ✅ COMPLETE
 
-The originally-planned single "Sprint 7 — Full Authentication" was split into 7.0/7.1/7.2 per explicit user instruction — see ADR-020 (also records that "Sprint 7.1" is intentionally reused: it already names the shipped Product Edit sprint below). This sprint covers customer email/password registration and login (`src/app/login/actions.ts`), Google OAuth + a shared `/auth/callback` code-exchange route (also used by password recovery), a password reset flow (`/forgot-password` → `/auth/reset-password`), customer session helpers (`verifySession`/`getUser` in `src/lib/auth/dal.ts`, generalized from the admin-only pair), a session-aware Navbar, and `src/proxy.ts` extended to gate `/checkout` and `/account/*`. Account dashboard, orders, wishlist, and cart merge are explicitly out of scope — see Sprint 7.1/7.2 below.
+The originally-planned single "Sprint 7 — Full Authentication" was split into 7.0/7.1/7.2 per explicit user instruction — see ADR-020 (also records that "Sprint 7.1" is intentionally reused: it already names the shipped Product Edit sprint below). Sprint 7.0 (Authentication Foundation) shipped customer email/password registration and login, Google OAuth, password reset, session-aware Navbar, and `src/proxy.ts` gating `/checkout` and `/account/*`. Sprint 7.1 (this one) builds the customer-facing account hub behind that gate: Profile (`/account`), full Address CRUD (`/account/addresses`), and UI-only Orders/Wishlist placeholders — designed, per explicit user instruction, as a **future-ready customer hub**: `src/components/account/nav-items.ts` already models Security, Invoices, Home Projects, Service Bookings, Home Documents, and Warranty Files as "coming soon" categories, so shipping any of them later is a config flip plus a page, not a redesign. Styled to match the storefront's warm stone/amber palette throughout — no admin `stone-900` chrome anywhere in `/account`.
 
-**Verification pass (2026-07-13, no code changes):** Registration, login's error path, `/forgot-password`, and protected-route redirects (`/account`, `/checkout` → `/login`; `/admin` → `/admin/login`, unregressed) were all confirmed against the live Supabase project. Login's success path and Logout could not be independently re-exercised in this pass — Supabase's auth email rate limit was hit after the session's registration attempts, and no test account with known credentials exists; both are verified by code review (identical shape to already-working `getUser`/`signOutAdmin` calls) rather than live click-through. Google OAuth remains blocked on the same external Supabase Dashboard step noted below, and was newly confirmed to fail **silently** (no user-visible error) when the provider is disabled — a small UX gap noted for a future pass, not fixed here. Full detail in `SESSION.md`'s "Sprint 7.0 Verification" section.
+**Verification (2026-07-13, live Supabase, real test account):** The Sprint 7.0 verification pass had been blocked on Login's success path and Logout — no working test account existed. The user created a permanent, Dashboard-created, Auto-Confirmed test account (per `TESTING.md` §1) and shared its credentials for this session only — not stored anywhere, per explicit instruction. Every previously-unverified item passed: Login success, Logout, and now also Profile edit/persistence, full Address CRUD (create/edit/set-default/delete), Orders/Wishlist placeholders, protected routes in both directions, and mobile responsiveness. **One real bug was found and fixed**: Base UI's `DropdownMenuLabel` requires a `<DropdownMenuGroup>` ancestor (unlike Radix) — the Navbar's account dropdown (Sprint 7.0 code) crashed the first time it was ever opened with a live session, simply because no session had existed to test it with until now. Fixed in `src/components/layout/Navbar.tsx`. Google OAuth remains blocked on the external Supabase Dashboard step noted below. Full detail in `SESSION.md`'s "Sprint 7.1 Verification" section.
 
 ---
 
@@ -59,6 +59,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint 7.1 | **Product Edit** at `/admin/products/[id]/edit` — reuses `ProductStudio` entirely via `initialDraft` + a new `action` prop. New `updateProduct` Server Action (`.update()` + `.upsert()` on `seo_metadata`), new `products_staff_update`/`seo_metadata_staff_update` RLS policies (migration `20260712000002`), shared Zod schema extracted to `src/components/admin/products/studio/validation.ts` so Create and Edit validate identically. See ADR-016. |
 | Sprint 6.1 (remaining) | **Delete (soft), Archive/Restore, Duplicate** — `src/app/admin/products/actions.ts` (new), all reusing existing RLS (`products_staff_update`/`products_staff_insert`), no new migration needed for these three. **Image upload to Supabase Storage** — `src/app/admin/products/media-actions.ts` (upload) + `src/components/admin/products/studio/images.ts` (`syncProductImages`, called from Create/Edit), migration `20260712000003` (new `products` bucket + `storage.objects`/`media`/`product_images` staff policies). **Real Product Quality scoring** — `src/components/admin/products/studio/scoring.ts`, deterministic (not AI). See ADR-018. |
 | Sprint 7.0 | **Authentication Foundation** — customer email/password registration + login (`src/app/login/actions.ts`, wired to the existing `/login` page's register/login toggle), Google OAuth (`supabase.auth.signInWithOAuth`) + shared `/auth/callback` Route Handler (code-exchange, reused by password recovery via a `next` query param), password reset (`/forgot-password` + `/auth/reset-password`), customer session helpers `verifySession`/`getUser` added to `src/lib/auth/dal.ts`, session-aware Navbar (account dropdown + sign out, live via `supabase.auth.onAuthStateChange`), `src/proxy.ts` extended to gate `/checkout` and `/account/*`. No new RLS/migrations needed — `profiles`/`addresses` policies already existed. See ADR-020. |
+| Sprint 7.1 | **User Area** — future-ready customer account hub. `src/components/account/nav-items.ts` (typed, grouped nav config, `active`/`comingSoon` status — single source of truth for both the pill nav and the "coming soon" teaser), `AccountShell.tsx`/`ComingSoonGrid.tsx` (storefront-styled, no admin chrome), `src/app/account/layout.tsx` (`verifySession()` gate), Profile (`page.tsx`/`ProfileForm.tsx`/`actions.ts` — `updateProfile`), Addresses (`addresses/{page.tsx,actions.ts}` + `AddressesView`/`AddressCard`/`AddressForm` — full CRUD via a `Sheet`, set-default unsets the prior default first, no transaction, same posture as ADR-015/016), Orders/Wishlist UI-only placeholders, `src/lib/supabase/queries/account.ts` (`getProfile` wrapped in `React.cache`, `getAddresses`). No new RLS/migrations needed. Also fixed a Sprint 7.0 bug found during this sprint's verification: Base UI's `DropdownMenuLabel` needs a `<DropdownMenuGroup>` wrapper. |
 
 ---
 
@@ -66,12 +67,11 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 
 | Sprint | Goal |
 |---|---|
-| Sprint 7.1 | User Area — profile page, addresses, account dashboard shell, orders placeholder, wishlist placeholder. Not to be confused with the already-shipped "Sprint 7.1 — Edit Product" above — see ADR-020. |
 | Sprint 7.2 | Cart & Session Continuity — scope to be defined later; expected to cover cart merge on login. No `cart`/`cart_items` table exists yet, so this likely needs a schema decision first. |
-| Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) |
+| Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) — will wire real data into the existing `/account/orders` placeholder |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
 
-**Do NOT implement** Sprint 7.1, 7.2, Stripe, or AI search until the relevant sprint begins.
+**Do NOT implement** Sprint 7.2, Stripe, or AI search until the relevant sprint begins.
 
 ---
 
@@ -120,6 +120,13 @@ src/
 │   ├── auth/
 │   │   ├── callback/      ← Route Handler (Sprint 7.0) — shared code-exchange for OAuth and password-recovery links, `next` query param picks the post-exchange destination
 │   │   └── reset-password/← Set new password under the recovery session (Sprint 7.0) — actions.ts (resetPassword), page.tsx
+│   ├── account/           ← Customer account hub (Sprint 7.1), gated by layout.tsx's verifySession()
+│   │   ├── layout.tsx     ← Server wrapper → <AccountShell>, fetches the profile once for the header
+│   │   ├── page.tsx       ← Profile — ProfileForm + ComingSoonGrid
+│   │   ├── actions.ts     ← updateProfile
+│   │   ├── addresses/     ← Full CRUD — page.tsx (AddressesView) + actions.ts (createAddress/updateAddress/deleteAddress/setDefaultAddress)
+│   │   ├── orders/        ← UI-only placeholder, no data
+│   │   └── wishlist/      ← UI-only placeholder, no data
 │   ├── page.tsx           ← Homepage
 │   └── layout.tsx         ← Root layout (fonts, providers)
 │
@@ -127,8 +134,9 @@ src/
 │   ├── admin/            ← AdminShell, AdminSidebar, AdminTopBar (sign-out wired)
 │   │   └── products/     ← ProductsView, ProductsToolbar, ProductsTable, ProductsPagination, ProductActionsMenu (fully wired: View/Edit/Duplicate/Archive-or-Restore/Delete), status.ts (real is_active/published_at derivation)
 │   │       └── studio/   ← ProductStudio (action prop: createProduct default, or updateProduct.bind(null, id)) + StudioSection/FormField/TagInput/ScoreCard/CharacterCounter + validation.ts (shared Zod schema) + images.ts (syncProductImages) + scoring.ts (computeProductQualityScores) + sections/
+│   ├── account/           ← Sprint 7.1 — AccountShell/ComingSoonGrid (storefront-styled, no admin chrome), nav-items.ts (typed, grouped, active/comingSoon config — single source of truth for the pill nav and the teaser grid), ProfileForm, AddressesView/AddressCard/AddressForm
 │   ├── home/              ← Homepage sections
-│   ├── layout/            ← Navbar, Footer
+│   ├── layout/            ← Navbar (session-aware account dropdown, Sprint 7.0), Footer
 │   ├── product/            ← Product detail sections
 │   ├── shop/                ← ProductCard, CartDrawer
 │   └── ui/                  ← shadcn/ui primitives
@@ -140,7 +148,8 @@ src/
 │   │   ├── queries/
 │   │   │   ├── products.ts        ← Storefront reads (plain client, SSG-safe, is_active=true only)
 │   │   │   ├── admin-products.ts  ← Admin list reads (browser client, no is_active filter, paginated)
-│   │   │   └── admin-product.ts   ← Admin single-product read for Edit (server client — kept separate from admin-products.ts to avoid next/headers in a client bundle)
+│   │   │   ├── admin-product.ts   ← Admin single-product read for Edit (server client — kept separate from admin-products.ts to avoid next/headers in a client bundle)
+│   │   │   └── account.ts         ← getProfile (React.cache, Sprint 7.1) + getAddresses, server client
 │   │   ├── client.ts     ← Browser Supabase client
 │   │   ├── server.ts     ← Server Supabase client (Server Components/Actions)
 │   │   └── middleware.ts ← updateSession() helper, called from src/proxy.ts
@@ -246,13 +255,13 @@ src/
 
 ## Next Priority
 
-**Sprint 7.0 (Authentication Foundation) is complete.** Customer register/login (email+password and Google OAuth), password reset, session-aware Navbar, and protected-route scaffolding for `/checkout` and `/account/*` are all real. What's left, in rough priority order:
+**Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both complete.** Customer register/login (email+password and Google OAuth), password reset, session-aware Navbar, and the `/account` hub (Profile, Addresses, Orders/Wishlist placeholders) are all real and verified live. What's left, in rough priority order:
 
 - A dedicated Media Library so a previously-uploaded image can be reused across products, rather than uploaded fresh each time (not yet scheduled to a sprint)
-- **Sprint 7.1 — User Area**: profile page, addresses, account dashboard shell, orders placeholder, wishlist placeholder — the pages that now sit behind Sprint 7.0's `/account/*` proxy gate.
 - **Sprint 7.2 — Cart & Session Continuity**: scope to be defined later; expected to cover cart merge on login, pending a schema decision (no `cart`/`cart_items` table exists yet).
+- **Sprint 8 — Payments & Orders**: will wire real data into the existing `/account/orders` placeholder.
 
-Do NOT start Sprint 7.1 or 7.2 work without explicit user instruction.
+Do NOT start Sprint 7.2 work without explicit user instruction.
 
 ---
 

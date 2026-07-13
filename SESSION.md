@@ -1,7 +1,7 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 7.0 — Authentication Foundation — complete.
+Sprint 7.1 — User Area — complete.
 
 ## Last Completed
 - ✅ Product Create
@@ -24,14 +24,22 @@ Sprint 7.0 — Authentication Foundation — complete.
 - ✅ Session-aware Navbar (account dropdown + sign out when logged in, live via
   `onAuthStateChange`)
 - ✅ `src/proxy.ts` extended to gate `/checkout` and `/account/*` for customer sessions
+- ✅ Account hub — Profile page (`/account`), full Address CRUD (`/account/addresses`), Orders
+  and Wishlist UI-only placeholders — designed to scale to 10 categories (Security, Invoices,
+  Home Projects, Service Bookings, Home Documents, Warranty Files shown as "coming soon") without
+  a future redesign
+- ✅ Found and fixed a real Base UI bug: `DropdownMenuLabel` requires a `<DropdownMenuGroup>`
+  wrapper (unlike Radix) — crashed the Navbar's account dropdown the first time it was ever
+  opened with a live session
 
 ## Current Status
-Sprint 6.1 (Product CRUD) remains fully operational, unchanged this sprint.
-Sprint 7.0 (Authentication Foundation) is complete: customers can register, sign in with
-email/password or Google, reset a forgotten password, and see a session-aware Navbar. Protected
-route scaffolding for `/checkout` and `/account/*` is in place via `src/proxy.ts`, but no pages
-exist behind it yet — that's Sprint 7.1. No account dashboard, orders, wishlist, or cart merge
-were built this sprint, per explicit scope.
+Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
+Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both complete: customers
+can register, sign in with email/password or Google, reset a forgotten password, see a
+session-aware Navbar, and manage their profile and addresses at `/account`. Orders and Wishlist
+are UI-only placeholders (no `orders`/`wishlist_items` data wired up — that's Sprint 8 and a
+future sprint respectively). Cart merge remains postponed to Sprint 7.2, pending a schema
+decision (no `cart`/`cart_items` table exists yet).
 
 ## Sprint 7.0 Verification (2026-07-13)
 
@@ -80,14 +88,53 @@ after the several registration attempts made across this sprint's implementation
 work, and no pre-existing customer test account with known credentials exists. Re-verify Login
 (positive path) and Logout once the rate limit clears or a test account is available.
 
+## Sprint 7.1 Verification (2026-07-13)
+
+The Sprint 7.0 blocker above was resolved: the user created a permanent, Dashboard-created,
+Auto-Confirmed test account per the strategy in `TESTING.md` §1, and shared its credentials for
+this session only (not stored anywhere — see `TESTING.md`'s "never store credentials" rule; the
+email/password are intentionally not written down here either). This unblocked full live
+verification of everything Sprint 7.0 left unconfirmed, plus all of Sprint 7.1:
+
+- **Login (success) — PASS.** Signed in with the test account, redirected to `/`, session cookie
+  (`sb-*-auth-token`, cookie-based via `@supabase/ssr` — not `localStorage`, correcting an earlier
+  assumption in `TESTING.md`) confirmed present.
+- **Logout — PASS.** Navbar account dropdown → Sign out → redirected to `/`, session cookie
+  cleared, Navbar reverted to logged-out state, `/account` re-redirected to `/login` afterward.
+- **Profile — PASS.** Edited Full Name/First Name/Last Name/Phone, saved, reloaded — all values
+  persisted correctly to `profiles`, and `AccountShell`'s "Welcome back, {name}" header picked up
+  the new name immediately.
+- **Addresses — PASS.** Full CRUD confirmed: create (via the Sheet form), edit (confirmed
+  pre-filled with existing values), set-as-default (badge updated, partial-unique constraint
+  respected), delete (list returned to the empty state). RLS correctly scoped everything to the
+  signed-in user.
+- **Orders / Wishlist placeholders — PASS.** Both render the intended UI-only empty state, no
+  network calls, no crash.
+- **Protected routes — PASS.** Confirmed both directions this time: `/account`, `/account/addresses`,
+  `/account/orders`, `/account/wishlist` all redirect to `/login` when logged out, and none of
+  them redirect away when logged in. `/admin` still correctly redirects to `/admin/login`
+  (unregressed).
+- **Mobile responsiveness — PASS.** Account nav's pill-tab row wraps naturally to a second line at
+  375px width; form fields stack correctly.
+- **A real bug found and fixed:** the Navbar's account dropdown crashed the first time it was
+  opened with a live session — Base UI's `DropdownMenuLabel` requires a `<DropdownMenuGroup>`
+  ancestor (unlike Radix, which doesn't). This is Sprint 7.0 code, only now exercised for the
+  first time with a real session. Fixed in `src/components/layout/Navbar.tsx` by wrapping the
+  label/separator/sign-out item in `<DropdownMenuGroup>`.
+- **Production build — PASS**, re-run after the fix; clean TypeScript + ESLint, 35 routes.
+
+**Tooling note:** this session's browser automation intermittently reported a `0×0` viewport and
+had clicks silently fail to register, on two different dev-server instances — resolved each time
+by an explicit `preview_resize` call. Unrelated to application code; noted here in case a future
+session hits the same thing and wastes time suspecting a real bug first.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 7.1 — User Area (profile page, addresses, account dashboard shell, orders placeholder,
-wishlist placeholder). Do NOT start without explicit user instruction — see docs/ROADMAP.md.
 Sprint 7.2 — Cart & Session Continuity (scope to be defined later; cart merge on login is
-postponed here, pending a schema decision — no `cart`/`cart_items` table exists yet).
+postponed here, pending a schema decision — no `cart`/`cart_items` table exists yet). Do NOT
+start without explicit user instruction — see docs/ROADMAP.md.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)
@@ -101,15 +148,16 @@ postponed here, pending a schema decision — no `cart`/`cart_items` table exist
   `[auth.external.google]` has `enabled = false` and empty credentials. A real Google OAuth
   client ID/secret must be added in the Supabase Dashboard and the provider enabled before
   "Continue with Google" works end-to-end — same category of one-time manual step as Sprint 6's
-  admin account creation. Email/password registration, login, and password reset were verified
-  end-to-end against the live Supabase project this session; Google OAuth's code path was wired
-  but could not be exercised past the redirect without that manual step. Confirmed during Sprint
-  7.0 verification: with the provider disabled, the button click fails **silently** (no error
-  shown to the user) — worth a small UX fix in a future pass, not addressed here.
-- Supabase auth email rate limit was hit during Sprint 7.0 verification (several registration
-  attempts in one session) — blocks further registration testing until it clears. No customer
-  test account with known credentials currently exists, so Login (positive path) and Logout
-  could not be independently re-verified this session — see "Sprint 7.0 Verification" above.
+  admin account creation. Confirmed during Sprint 7.0 verification: with the provider disabled,
+  the button click fails **silently** (no error shown to the user) — worth a small UX fix in a
+  future pass, not addressed here.
+- The linked remote Supabase project requires email confirmation for new signups (contrary to
+  local `config.toml`'s `enable_confirmations = false`) and has a low auth email rate limit —
+  confirmed, not just suspected, as of Sprint 7.1. Resolved for verification purposes with a
+  permanent Dashboard-created test account per `TESTING.md` §1 — do not attempt to work around
+  this by disabling confirmation project-wide (see `TESTING.md` §3 for why).
+- Orders and Wishlist are UI-only placeholders (`/account/orders`, `/account/wishlist`) — no
+  `orders`/`wishlist_items` data is wired up yet.
 
 ## Do Not Change
 - Design system

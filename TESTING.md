@@ -1,32 +1,61 @@
 # HomeNest — Manual Testing Notes
 
 > Practical notes for verifying authentication (and similar Supabase-backed flows) by hand,
-> written after Sprint 7.0 verification hit several avoidable snags. Read this before
-> re-verifying auth so the same time isn't spent rediscovering the same constraints.
+> written after Sprint 7.0 verification hit several avoidable snags, and revised after Sprint 7.1
+> confirmed those snags weren't one-offs. Read this before re-verifying auth so the same time
+> isn't spent rediscovering the same constraints.
 
 ---
 
 ## 1. Test Account Strategy
 
-- **Use Gmail plus-addressing tied to the project owner's real inbox** for test accounts, e.g.
-  `riadkarkoura+homenest-test@gmail.com`. Supabase accepts these as normal, deliverable addresses
-  (unlike `@example.com` or `.test` domains, which Supabase's signup validation rejects outright).
-- **Maintain ONE persistent, known-working test account** for login/logout/session verification,
-  rather than registering a fresh one every session. Supabase's auth email rate limit is low by
-  default (`email_sent = 2`/hour in local `supabase/config.toml`; the linked remote project has
-  its own dashboard-configured limit, observed to be similarly restrictive) — a handful of
-  registration attempts in one sitting can exhaust it, blocking further signup testing for the
-  rest of the hour.
-- **Do not commit test account credentials to the repo.** Store the persistent test account's
-  email/password in a local password manager or an untracked local file (e.g.
-  `.env.local.notes`, already covered by `.gitignore` patterns for `.env*`) — never in Markdown
-  docs, commit messages, or code comments.
-- **Reserve fresh signups specifically for testing the registration flow itself** (validation,
-  duplicate-email handling, the "check your email" fallback path). Use the persistent account for
-  everything else (login, logout, protected-route checks, Navbar session state).
-- If a fresh signup is needed and the rate limit is a concern, wait at least an hour since the
-  last batch of signup attempts, or ask whoever holds Supabase Dashboard access to check the
-  current rate-limit window under Authentication → Rate Limits.
+**Do not rely on any personal email inbox for test-account verification.** Sprint 7.0's
+verification pass used Gmail plus-addressing against the project owner's real inbox as a
+workaround; Sprint 7.1 confirmed this doesn't actually work as a repeatable strategy — the linked
+Supabase project requires email confirmation before a new signup gets a session (see §2), so
+every plus-addressed test signup sat unconfirmed and unusable regardless of whose inbox it
+pointed at, and repeated attempts also burn the project's auth email rate limit. Personal inboxes
+are also simply the wrong place for infrastructure that other sessions and other people need to
+depend on.
+
+### Recommended: one permanent, Dashboard-created test account
+
+Create this once; it works indefinitely afterward with no email step, ever.
+
+1. Open the Supabase Dashboard for this project → **Authentication → Users**.
+2. Click **Add user → Create new user**.
+3. Enter an email address. It does **not** need to be a real, reachable inbox — creating a user
+   this way, with the option in step 4 checked, never sends a confirmation email for this account.
+   Use something clearly labeled as a test account, e.g. `qa-customer@homenest-test.dev` (pick any
+   convention; the exact address doesn't matter since nothing is ever delivered to it).
+4. Enter a password (minimum 8 characters — matches `supabase/config.toml`'s
+   `minimum_password_length = 8`; double check the hosted project's own policy under
+   Authentication → Policies if it's been configured to differ).
+5. **Check "Auto Confirm User" before saving.** This is the one setting that matters — it marks
+   the account's email as confirmed immediately, skipping the confirmation-email step entirely
+   for this account only. It does not change any project-wide setting.
+6. Save. The existing `handle_new_user()` trigger fires exactly as it would for a normal signup,
+   creating a matching `profiles` row with `role = 'user'` — correct for testing customer-only
+   flows (Profile, Addresses, Orders, Wishlist, login, logout).
+7. Store the resulting email/password in a local, untracked file or a password manager —
+   never in the repo, never in a commit message, never pasted into a chat transcript that gets
+   persisted anywhere durable.
+
+This account is intentionally separate from the Sprint 6 admin/staff test account (`role =
+'staff'`/`'admin'`, used for `/admin/*`) — keep them distinct so a test of customer-facing flows
+never accidentally exercises admin-only RLS paths, and vice versa.
+
+### Using the account
+
+- **Reuse it indefinitely** for login (success path), logout, Navbar session state, Profile
+  edits, and Address CRUD — anything that just needs *a* working session.
+- **Reserve fresh signups** (a second, throwaway account per attempt) specifically for testing the
+  registration flow's own behavior — validation, duplicate-email handling, the "check your email
+  to confirm" fallback message. Expect these to sit unconfirmed and unusable for login; that's
+  the current, confirmed behavior of this project's Supabase configuration, not a bug to chase.
+- If a batch of fresh-signup testing is needed and the auth email rate limit is a concern, ask
+  whoever holds Dashboard access to check the current window under Authentication → Rate Limits
+  before assuming it's clear.
 
 ---
 
@@ -37,15 +66,52 @@ work. None of them are things application code can fix.
 
 | Dependency | Where | Status as of Sprint 7.0 |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` | Present, working (all Sprint 6/6.1/7.0 features already depend on these) |
-| Email confirmation requirement | Supabase Dashboard → Authentication → Providers → Email → "Confirm email" | **Unconfirmed / suspicious.** `supabase/config.toml` sets `enable_confirmations = false`, but every registration attempt during Sprint 7.0 verification returned a no-session response, consistent with the **linked remote project actually requiring confirmation**, contrary to local config. `config.toml` is a local-dev file; it is not guaranteed to reflect the linked remote project's actual settings (see ADR-013's note on a similar local/remote divergence for Storage buckets). **Check this directly in the Dashboard before assuming registration is fully working.** |
-| Auth email rate limit | Supabase Dashboard → Authentication → Rate Limits | Low; exhausted during Sprint 7.0 verification after several registration attempts in one session. Exact remote value unconfirmed — don't assume it matches `config.toml`'s `email_sent = 2`. |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` | Present, working (all Sprint 6/6.1/7.0/7.1 features already depend on these) |
+| Email confirmation requirement | Supabase Dashboard → Authentication → Providers → Email → "Confirm email" | **Confirmed ON.** `supabase/config.toml` sets `enable_confirmations = false`, but repeated registration attempts across Sprint 7.0 and 7.1 verification consistently returned a no-session response — the **linked remote project requires confirmation**, contrary to local config. `config.toml` only governs the local Supabase CLI emulator (`supabase start`); it has no effect on the hosted/remote project this app's `.env.local` actually points to (see ADR-013's note on a similar local/remote divergence for Storage buckets, and §4 below for why this shouldn't simply be switched off). Use §1's "Auto Confirm User" test account to work around this for verification rather than waiting on it. |
+| Auth email rate limit | Supabase Dashboard → Authentication → Rate Limits | Low; exhausted during Sprint 7.0 verification after several registration attempts in one session, and easy to re-hit. Exact remote value unconfirmed — don't assume it matches `config.toml`'s `email_sent = 2`. Budget fresh-signup attempts accordingly (§1). |
 | Google OAuth provider | Supabase Dashboard → Authentication → Providers → Google | **Disabled.** `supabase/config.toml`'s `[auth.external.google]` has `enabled = false`, `client_id`/`secret` sourced from unset env vars (`SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`/`_SECRET`). See the checklist below. |
 | Redirect URL allow-list | Supabase Dashboard → Authentication → URL Configuration → Redirect URLs | Must include `http://localhost:3000/auth/callback` for local dev OAuth/password-recovery redirects to be accepted. Not confirmed present — check before testing OAuth. |
 
 ---
 
-## 3. Google OAuth Setup Checklist
+## 3. Is Disabling Email Confirmation Appropriate for "Local Development Only"?
+
+**Short answer: not by flipping the project's global toggle — no.** There are two different
+things that both get called "local," and conflating them is the trap here:
+
+- **`supabase/config.toml` + `supabase start`** is a genuine local Postgres/Auth/Storage emulator
+  that runs entirely on a developer's machine via Docker. Setting `enable_confirmations = false`
+  there is completely safe and properly scoped — it can never affect the shared hosted project,
+  because it isn't talking to it.
+- **The project this app actually talks to right now** — per `.env.local`'s
+  `NEXT_PUBLIC_SUPABASE_URL` — is the single **hosted, remote** Supabase project. This is not a
+  local emulator. Every `next dev` session, and (as far as these docs show) the eventual
+  production deployment too, point at this same one project. There is no separate
+  staging/production Supabase project documented anywhere in this repo.
+
+Given that, turning off "Confirm email" in the Dashboard for this project would not be a
+local-only change — it's a **project-wide, shared setting**. It would apply to every signup
+through this project, including real customers once HomeNest actually ships, unless a separate
+production project is stood up first (a real, valid option — see below — but a bigger decision
+than what's needed today). Disabling it now would mean anyone could register with an email
+address they don't own and get a working, logged-in session immediately: a real anti-abuse and
+account-security regression for a live storefront, not something to leave in place as a side
+effect of unblocking a test session.
+
+**Recommendation:** don't touch the project-wide toggle. Use §1's single "Auto Confirm User"
+test account instead — it produces the same practical result (a session-ready account with zero
+email steps) scoped to exactly one account, with no effect on anyone else signing up through the
+same project.
+
+**If a genuinely separate dev environment is wanted later:** the standard fix is a second,
+dedicated Supabase project used only for development (with its own, more permissive auth
+settings), while the current project is reserved for staging/production. That's a legitimate,
+common setup — but it's an infrastructure decision with its own tradeoffs (schema/migration sync
+between two projects, separate seed data, etc.), and shouldn't be backed into via a single toggle
+flip. Worth a deliberate conversation if repeated dev-only auth friction like this keeps coming
+up, not something to decide informally while unblocking one sprint's verification.
+
+## 4. Google OAuth Setup Checklist
 
 Google sign-in is fully wired in code (`src/app/login/page.tsx`'s `handleGoogleSignIn`,
 `src/app/auth/callback/route.ts`) but cannot work until someone with Supabase/Google Cloud access
@@ -73,7 +139,7 @@ account.
 
 ---
 
-## 4. Manual Verification Checklist
+## 5. Manual Verification Checklist
 
 Run through this after any change touching auth, using the persistent test account from §1 for
 every item except Registration.
@@ -87,9 +153,11 @@ every item except Registration.
 - [ ] **Login (failure)** — wrong password → expect "Invalid email or password." inline, no
       crash, no redirect.
 - [ ] **Logout** — while signed in, open the Navbar's account dropdown → "Sign out". Expect
-      redirect to `/`, Navbar reverts to the signed-out state (plain account icon, no dropdown),
-      and `localStorage` keys starting with `sb-` are cleared (check via
-      `Object.keys(localStorage).filter(k => k.startsWith('sb-'))` in the console).
+      redirect to `/`, Navbar reverts to the signed-out state (plain account icon, no dropdown).
+      Session state lives in a **cookie**, not `localStorage` (this app uses `@supabase/ssr`,
+      which is cookie-based so Server Components/Actions can read the session) — check via
+      `document.cookie.split('; ').filter(c => c.startsWith('sb-'))` in the console; it should be
+      empty after logout.
 - [ ] **Google OAuth** — see checklist item 7 above.
 - [ ] **Password reset** — `/forgot-password` → submit the test account's email → expect the "if
       an account exists…" confirmation message (shown regardless of whether the email is real, by
@@ -99,30 +167,31 @@ every item except Registration.
 - [ ] **Protected routes (logged out)** — visit `/account` and `/checkout` directly; expect
       redirect to `/login` in both cases. Visit `/admin`; expect redirect to `/admin/login`
       (confirms the customer-route proxy changes didn't regress the separate admin gate).
-- [ ] **Protected routes (logged in)** — visit `/account` and `/checkout` while signed in; expect
-      **no** redirect to `/login` (a 404 is fine and expected — no page exists behind the gate
-      yet, that's Sprint 7.1 — but bouncing back to `/login` would indicate a proxy bug).
+- [ ] **Protected routes (logged in)** — visit `/account` while signed in; expect the Profile
+      page, not a redirect. Visit `/checkout` while signed in; expect **no** redirect to `/login`
+      (a 404 is fine and expected — no page exists behind that gate yet, that's Sprint 8 — but
+      bouncing back to `/login` would indicate a proxy bug).
 - [ ] **Production build** — `npm run build`; expect a clean TypeScript + ESLint pass and all
       routes listed with no errors.
 
 ---
 
-## 5. Known Limitations
+## 6. Known Limitations
 
 - **Supabase's auth email rate limit is easy to exhaust during manual testing.** Budget
   registration attempts accordingly (see §1); don't burn them on repeated login/logout checks.
-- **Local `supabase/config.toml` may not reflect the linked remote project's actual auth
-  settings** (email confirmation requirement, rate limits). Treat config.toml as documentation of
-  intent, not a guarantee of the remote project's live behavior — confirm anything auth-critical
-  directly in the Supabase Dashboard before relying on it.
+- **Local `supabase/config.toml` does not reflect the linked remote project's actual auth
+  settings** (confirmed during Sprint 7.1: email confirmation is required remotely despite
+  `enable_confirmations = false` locally). Treat config.toml as documentation of intent for the
+  local CLI emulator only, never as a guarantee of the hosted project's live behavior.
 - **Google OAuth fails silently in the UI** when the provider is disabled or misconfigured: the
   button briefly shows "Redirecting…" then reverts with no visible error and no console error.
   This is a real UX gap (a disabled/misconfigured provider should tell the user something went
   wrong) but was left unfixed per Sprint 7.0's "verification only, no code changes" scope — flag
   it for a future small fix rather than re-discovering it as a mystery.
-- **No `/account` or `/checkout` pages exist yet** (Sprint 7.1/7.2). Protected-route testing can
-  only confirm the redirect/no-redirect behavior at the proxy level, not any page content behind
-  it.
+- **`/checkout` still has no page** (Sprint 8). Protected-route testing there can only confirm
+  the redirect behavior at the proxy level. `/account/*` pages (Profile, Addresses, Orders,
+  Wishlist) do exist as of Sprint 7.1.
 - **No automated tests exist for any auth flow.** All verification here is manual and
   browser-driven; there is no CI safety net yet (matches the project-wide "No automated tests
   yet" status in `SESSION.md`).
@@ -132,3 +201,16 @@ every item except Registration.
   `useSearchParams()` on a page that also needs snappy click interactivity, wrap only the minimal
   subtree in `Suspense` and test click handlers immediately — this bug class produced no console
   errors and was easy to mistake for browser-automation flakiness rather than a real regression.
+- **Base UI's `DropdownMenuLabel` requires a `<DropdownMenuGroup>` ancestor** (unlike Radix,
+  where a bare label works fine). Using it directly under `DropdownMenuContent` throws `Base UI:
+  MenuGroupContext is missing` the moment the menu is actually opened — this crashed the Navbar's
+  account dropdown (Sprint 7.0 code) the first time Sprint 7.1's verification pass opened it with
+  a real session, since no session had existed to test it with before then. Fixed by wrapping the
+  label/separator/item in `<DropdownMenuGroup>`. Watch for this in any new `DropdownMenu` usage
+  that includes a label.
+- **Browser automation in this environment has intermittently reported a `0×0` viewport and had
+  clicks silently fail to register** (no error, `aria-expanded` just never flips), observed across
+  two different dev-server restarts during Sprint 7.1 verification. Each time, an explicit
+  `preview_resize` call to a real width/height fixed it. If a click "does nothing" with no console
+  error and no network activity, check `window.innerWidth`/`innerHeight` before assuming the
+  component is broken.
