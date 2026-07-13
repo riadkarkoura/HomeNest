@@ -2,18 +2,24 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
-  ShoppingCart, Menu, X, Search, User,
+  ShoppingCart, Menu, X, Search, User, LogOut,
   ChevronDown, ArrowUpRight, ChevronRight,
 } from "lucide-react";
 import {
   useState, useEffect, useRef, useCallback,
 } from "react";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { EASE } from "@/lib/motion";
 import { useCartStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import CartDrawer from "@/components/shop/CartDrawer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -377,7 +383,13 @@ function MegaPanel({
 
 // ─── Mobile panel ─────────────────────────────────────────────────────────────
 
-function MobilePanel({ onClose }: { onClose: () => void }) {
+function MobilePanel({
+  onClose, user, onSignOut,
+}: {
+  onClose: () => void;
+  user: SupabaseUser | null;
+  onSignOut: () => void;
+}) {
   const [collectionsOpen, setCollectionsOpen] = useState(false);
 
   return (
@@ -458,13 +470,23 @@ function MobilePanel({ onClose }: { onClose: () => void }) {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 }}
         >
-          <Link
-            href="/login"
-            onClick={onClose}
-            className="flex items-center justify-between py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950"
-          >
-            Sign In / Register
-          </Link>
+          {user ? (
+            <button
+              onClick={() => { onSignOut(); onClose(); }}
+              className="flex w-full items-center justify-between py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950"
+            >
+              Sign out
+              <span className="truncate text-sm text-stone-400">{user.email}</span>
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              onClick={onClose}
+              className="flex items-center justify-between py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950"
+            >
+              Sign In / Register
+            </Link>
+          )}
         </motion.div>
       </nav>
 
@@ -487,14 +509,36 @@ function MobilePanel({ onClose }: { onClose: () => void }) {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const totalItems = useCartStore((s) => s.totalItems)();
 
   const [scrolled,    setScrolled]    = useState(false);
   const [activeMenu,  setActiveMenu]  = useState<string | null>(null);
   const [searchOpen,  setSearchOpen]  = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [user,        setUser]        = useState<SupabaseUser | null>(null);
 
   const menuTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Session state — live via onAuthStateChange, not just a one-time read ──
+  useEffect(() => {
+    const supabase = createClient();
+
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }, [router]);
 
   // ── Scroll listener ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -681,18 +725,47 @@ export default function Navbar() {
             </motion.button>
 
             {/* Account */}
-            <Link href="/login" className="hidden md:flex">
-              <motion.button
-                animate={{ color: iconColor }}
-                transition={{ duration: 0.35 }}
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.94 }}
-                className="h-9 w-9 items-center justify-center flex"
-                aria-label="Account"
-              >
-                <User className="h-[16px] w-[16px]" />
-              </motion.button>
-            </Link>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <motion.button
+                      animate={{ color: iconColor }}
+                      transition={{ duration: 0.35 }}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.94 }}
+                      className="hidden h-9 w-9 items-center justify-center md:flex"
+                      aria-label="Account menu"
+                    />
+                  }
+                >
+                  <User className="h-[16px] w-[16px]" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="truncate font-normal text-stone-500">
+                    {user.email}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="gap-2 text-stone-700">
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link href="/login" className="hidden md:flex">
+                <motion.button
+                  animate={{ color: iconColor }}
+                  transition={{ duration: 0.35 }}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.94 }}
+                  className="h-9 w-9 items-center justify-center flex"
+                  aria-label="Account"
+                >
+                  <User className="h-[16px] w-[16px]" />
+                </motion.button>
+              </Link>
+            )}
 
             {/* Cart */}
             <Sheet>
@@ -809,7 +882,9 @@ export default function Navbar() {
 
       {/* ── Mobile panel ────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {mobileOpen && <MobilePanel onClose={() => setMobileOpen(false)} />}
+        {mobileOpen && (
+          <MobilePanel onClose={() => setMobileOpen(false)} user={user} onSignOut={handleSignOut} />
+        )}
       </AnimatePresence>
 
       {/* ── Search overlay ──────────────────────────────────────────────── */}

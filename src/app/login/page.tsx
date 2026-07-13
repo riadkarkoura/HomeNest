@@ -2,16 +2,37 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/supabase/client";
+import { signup, login, type AuthState } from "./actions";
+
+const initialState: AuthState = {};
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  const [signupState, signupAction, signupPending] = useActionState(signup, initialState);
+  const [loginState, loginAction, loginPending] = useActionState(login, initialState);
+
+  const state = isRegister ? signupState : loginState;
+  const formAction = isRegister ? signupAction : loginAction;
+  const pending = isRegister ? signupPending : loginPending;
+
+  async function handleGoogleSignIn() {
+    setIsGoogleLoading(true);
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+  }
 
   return (
     <div className="min-h-screen bg-stone-50 flex">
@@ -63,7 +84,13 @@ export default function LoginPage() {
 
           {/* OAuth buttons */}
           <div className="space-y-3">
-            <Button variant="outline" className="w-full py-5 gap-3 border-stone-200">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full py-5 gap-3 border-stone-200"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading}
+            >
               <svg viewBox="0 0 24 24" className="h-5 w-5">
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -82,7 +109,7 @@ export default function LoginPage() {
                   fill="#EA4335"
                 />
               </svg>
-              Continue with Google
+              {isGoogleLoading ? "Redirecting…" : "Continue with Google"}
             </Button>
           </div>
 
@@ -93,7 +120,7 @@ export default function LoginPage() {
           </div>
 
           {/* Email form */}
-          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+          <form action={formAction} className="space-y-4">
             {isRegister && (
               <div>
                 <Label htmlFor="name" className="text-sm font-medium text-stone-700">
@@ -101,10 +128,12 @@ export default function LoginPage() {
                 </Label>
                 <Input
                   id="name"
+                  name="name"
                   type="text"
                   placeholder="Jane Doe"
                   className="mt-1.5"
                   autoComplete="name"
+                  required
                 />
               </div>
             )}
@@ -114,10 +143,12 @@ export default function LoginPage() {
               </Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 placeholder="you@example.com"
                 className="mt-1.5"
                 autoComplete="email"
+                required
               />
             </div>
             <div>
@@ -126,7 +157,7 @@ export default function LoginPage() {
                   Password
                 </Label>
                 {!isRegister && (
-                  <Link href="#" className="text-xs text-amber-600 hover:underline">
+                  <Link href="/forgot-password" className="text-xs text-amber-600 hover:underline">
                     Forgot password?
                   </Link>
                 )}
@@ -134,10 +165,12 @@ export default function LoginPage() {
               <div className="relative">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder={isRegister ? "Create a strong password" : "Enter your password"}
                   autoComplete={isRegister ? "new-password" : "current-password"}
                   className="pr-10"
+                  required
                 />
                 <button
                   type="button"
@@ -162,11 +195,14 @@ export default function LoginPage() {
               </div>
             )}
 
+            {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
+
             <Button
               type="submit"
+              disabled={pending}
               className="w-full bg-stone-900 hover:bg-amber-700 text-white py-5 gap-2 text-base"
             >
-              {isRegister ? "Create Account" : "Sign In"}
+              {pending ? "Please wait…" : isRegister ? "Create Account" : "Sign In"}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </form>

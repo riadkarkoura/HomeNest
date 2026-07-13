@@ -308,5 +308,26 @@ The no-rollback decision is a deliberate asymmetry with ADR-015, not an oversigh
 
 ---
 
+## ADR-020 — Sprint 7 split into 7.0/7.1/7.2; "Sprint 7.1" intentionally reused
+**Date:** 2026-07-13
+**Status:** Accepted
+
+**Decision:** The originally-planned single "Sprint 7 — Full Authentication" is split into three sequentially-numbered sprints per explicit user instruction:
+- **Sprint 7.0 — Authentication Foundation:** email/password registration and login, Google OAuth, `/auth/callback`, session management, session-aware Navbar, protected routes (`proxy.ts` extended to `/checkout` and `/account/*`), password reset. Explicitly excludes account dashboard, orders, wishlist, and cart merge.
+- **Sprint 7.1 — User Area:** profile page, addresses, account dashboard shell, orders placeholder, wishlist placeholder. Depends on Sprint 7.0's session plumbing and protected-route gate.
+- **Sprint 7.2 — Cart & Session Continuity:** scope intentionally deferred; will cover cart merge on login (localStorage → server) and any related session-continuity concerns once the underlying schema question (no `cart`/`cart_items` table exists yet) is resolved.
+
+The number **7.1 is deliberately reused**: it already names the shipped Product Edit work (see the Sprint 7.1 entry in `docs/ROADMAP.md`'s Sprint History and ADR-016). That entry is **not renamed or renumbered** — ADRs and shipped sprint history are treated as append-only in this project (see ADR-019's precedent, where a duplicate ADR number was fixed by renumbering the newer entry, never the older one). Going forward, "Sprint 7.1" is ambiguous by name only; context (Product Edit vs. User Area) disambiguates which one is meant. This ADR exists specifically so that ambiguity is traceable rather than silent.
+
+**Reason:** The user approved the Sprint 7 authentication plan with two changes: (1) split it into a foundation sprint and a user-facing-area sprint so account/orders/wishlist UI doesn't ship before session plumbing exists to protect it, and (2) explicitly requested sequential numbering (7.0/7.1/7.2) after being shown that 7.1 and 7.2 were already taken by, respectively, the shipped Product Edit sprint and the pending bulk-actions proposal (ADR-017/ADR-019). The user confirmed proceeding with the collision rather than alternative numbering.
+
+**Consequence:** Any future reference to "Sprint 7.1" must specify which one (Product Edit vs. User Area) if ambiguity matters — dates disambiguate (Product Edit: 2026-07-12; User Area: not yet started as of this ADR). The pending Sprint 7.2 bulk-actions proposal (ADR-019) is a **separate, still-unrelated, still-pending** item from this Sprint 7.2 (Cart & Session Continuity) — two different proposals now share the same number for two different scopes. This should be resolved (renamed or merged) before either actually ships, to avoid a third overload of the same number.
+
+**Alternatives considered:**
+- Number the new sprints 7.0/7.3 to avoid any collision (proposed first) — rejected by explicit user instruction in favor of strict sequential numbering, accepting the disambiguation cost documented above.
+- Rename the existing Product Edit sprint's label — rejected; it's shipped, referenced by ADR-016 and `docs/ROADMAP.md` Sprint History, and this project treats shipped sprint history as append-only the same way it treats ADRs.
+
+---
+
 *Document maintained by: Lead Product Engineer*
 *Last updated: 2026-07-13*

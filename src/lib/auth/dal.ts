@@ -41,3 +41,29 @@ export async function getAdminUser() {
 
   return { user, supabase };
 }
+
+// Customer-facing counterparts to the two functions above — same split,
+// same reasoning (see comment block up top), generalized beyond /admin.
+// verifySession() — for Server Components / pages under /account, /checkout.
+// getUser() — for Server Actions that mutate user-entered form data.
+export const verifySession = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  return { user, supabase };
+});
+
+export async function getUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return null;
+
+  return { user, supabase };
+}

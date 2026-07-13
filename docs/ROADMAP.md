@@ -197,19 +197,39 @@ Shipped ahead of Sprint 7 (Full Authentication) — same kind of out-of-order nu
 
 ## 3. Upcoming Sprints
 
-### Sprint 7 — Full Authentication
-**Goal:** Customer accounts, on top of the Sprint 6 admin-only bridge
+**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Number 7.1 is intentionally reused: it also names the already-shipped Product Edit sprint below (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reuses a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section.
+
+### Sprint 7.0 — Authentication Foundation
+**Goal:** Real customer authentication and session-aware app shell, on top of the Sprint 6 admin-only bridge. No account-facing UI yet — that's Sprint 7.1.
 
 **Tasks:**
-- [ ] Wire the existing storefront `/login` page (already has the Google OAuth button and register toggle UI) to `supabase.auth.signInWithOAuth` and a real register Server Action
+- [ ] Email/password registration (Server Action, `supabase.auth.signUp`)
+- [ ] Email/password login (Server Action, `supabase.auth.signInWithPassword`)
+- [ ] Wire the existing storefront `/login` page's Google OAuth button to `supabase.auth.signInWithOAuth`
 - [ ] `/auth/callback` route for OAuth redirect
-- [ ] Extend `src/proxy.ts` (not a new file — see ADR-014) to also gate `/checkout` and `/account/*` for customer sessions
+- [ ] Session management — generalize `src/lib/auth/dal.ts`'s `verifyAdminSession`/`getAdminUser` pattern for customer sessions
 - [ ] Session-aware Navbar (show avatar + account menu when logged in)
-- [ ] Protected account area `/account/` (profile, orders, wishlist)
-- [ ] Cart merge on login (localStorage → server)
+- [ ] Extend `src/proxy.ts` (not a new file — see ADR-014) to also gate `/checkout` and `/account/*` for customer sessions
 - [ ] Password reset flow
 
+**Explicitly excluded from this sprint:** account dashboard, orders, wishlist, cart merge — see Sprint 7.1 and 7.2.
+
 **Constraint:** No breaking changes to storefront. Auth must be additive. Extend `src/lib/auth/dal.ts` and `src/lib/supabase/{client,server,middleware}.ts` rather than duplicating them.
+
+### Sprint 7.1 — User Area
+**Goal:** Customer-facing account UI, behind the protection Sprint 7.0 wires up. (Not to be confused with the already-shipped "Sprint 7.1 — Edit Product" below — see ADR-020.)
+
+**Tasks:**
+- [ ] Profile page (`/account`) — read/update own `profiles` row
+- [ ] Addresses (`/account/addresses`) — full CRUD against `addresses`
+- [ ] Account dashboard shell/nav
+- [ ] Orders placeholder (`/account/orders`) — UI only, no `orders` table writes yet (Sprint 8)
+- [ ] Wishlist placeholder (`/account/wishlist`) — UI only
+
+### Sprint 7.2 — Cart & Session Continuity
+**Goal:** Scope to be defined later. Expected to cover cart merge on login (localStorage → server) and related session-continuity concerns.
+
+**Note:** No `cart`/`cart_items` table exists yet in `docs/DATABASE.md` — this sprint likely needs its own schema decision before implementation, not just application code.
 
 ### Sprint 8 — Payments & Orders
 **Goal:** End-to-end checkout with Stripe

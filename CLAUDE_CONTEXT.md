@@ -28,16 +28,16 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 6.1 (remaining) — Delete, images, scoring. Sprint 6.1 is now fully done.  
+**Last sprint completed:** Sprint 7.0 — Authentication Foundation.  
 **Date of last update:** 2026-07-13
 
 ---
 
 ## Current Sprint
 
-**Sprint 6.1 (remaining) — Delete, images, scoring** ✅ COMPLETE
+**Sprint 7.0 — Authentication Foundation** ✅ COMPLETE
 
-Closed out everything Sprint 6.1 (partial) and Sprint 7.1 left pending: `ProductActionsMenu` is fully wired (View/Edit/Duplicate/Archive-or-Restore/Delete), real image upload to Supabase Storage replaces the Media section's static dropzone, and `ProductQualitySection` shows real deterministic scores instead of placeholders. The build passes. See ADR-018 for the full reasoning. The manual admin-account step from Sprint 6 is still the only thing gating end-to-end interactive testing of any admin write path — see Sprint 6 in `docs/ROADMAP.md` if it hasn't been done yet.
+The originally-planned single "Sprint 7 — Full Authentication" was split into 7.0/7.1/7.2 per explicit user instruction — see ADR-020 (also records that "Sprint 7.1" is intentionally reused: it already names the shipped Product Edit sprint below). This sprint covers customer email/password registration and login (`src/app/login/actions.ts`), Google OAuth + a shared `/auth/callback` code-exchange route (also used by password recovery), a password reset flow (`/forgot-password` → `/auth/reset-password`), customer session helpers (`verifySession`/`getUser` in `src/lib/auth/dal.ts`, generalized from the admin-only pair), a session-aware Navbar, and `src/proxy.ts` extended to gate `/checkout` and `/account/*`. Account dashboard, orders, wishlist, and cart merge are explicitly out of scope — see Sprint 7.1/7.2 below. Email/password flows were verified end-to-end against the live Supabase project in-browser; Google OAuth is wired but requires a manual Supabase Dashboard step (real client ID/secret + enabling the provider) before it's testable end-to-end, same category as Sprint 6's admin-account step.
 
 ---
 
@@ -56,6 +56,7 @@ Closed out everything Sprint 6.1 (partial) and Sprint 7.1 left pending: `Product
 | Sprint 6.1 (partial) | **Live Products list** at `/admin/products` — `src/lib/supabase/queries/admin-products.ts` (paginated, filtered, RLS-gated, browser client), real `status.ts` derivation from `is_active`/`published_at`, `ProductsPagination.tsx`. |
 | Sprint 7.1 | **Product Edit** at `/admin/products/[id]/edit` — reuses `ProductStudio` entirely via `initialDraft` + a new `action` prop. New `updateProduct` Server Action (`.update()` + `.upsert()` on `seo_metadata`), new `products_staff_update`/`seo_metadata_staff_update` RLS policies (migration `20260712000002`), shared Zod schema extracted to `src/components/admin/products/studio/validation.ts` so Create and Edit validate identically. See ADR-016. |
 | Sprint 6.1 (remaining) | **Delete (soft), Archive/Restore, Duplicate** — `src/app/admin/products/actions.ts` (new), all reusing existing RLS (`products_staff_update`/`products_staff_insert`), no new migration needed for these three. **Image upload to Supabase Storage** — `src/app/admin/products/media-actions.ts` (upload) + `src/components/admin/products/studio/images.ts` (`syncProductImages`, called from Create/Edit), migration `20260712000003` (new `products` bucket + `storage.objects`/`media`/`product_images` staff policies). **Real Product Quality scoring** — `src/components/admin/products/studio/scoring.ts`, deterministic (not AI). See ADR-018. |
+| Sprint 7.0 | **Authentication Foundation** — customer email/password registration + login (`src/app/login/actions.ts`, wired to the existing `/login` page's register/login toggle), Google OAuth (`supabase.auth.signInWithOAuth`) + shared `/auth/callback` Route Handler (code-exchange, reused by password recovery via a `next` query param), password reset (`/forgot-password` + `/auth/reset-password`), customer session helpers `verifySession`/`getUser` added to `src/lib/auth/dal.ts`, session-aware Navbar (account dropdown + sign out, live via `supabase.auth.onAuthStateChange`), `src/proxy.ts` extended to gate `/checkout` and `/account/*`. No new RLS/migrations needed — `profiles`/`addresses` policies already existed. See ADR-020. |
 
 ---
 
@@ -63,11 +64,12 @@ Closed out everything Sprint 6.1 (partial) and Sprint 7.1 left pending: `Product
 
 | Sprint | Goal |
 |---|---|
-| Sprint 7 | Full Authentication — customer accounts, register, OAuth, password reset, session-aware Navbar, protected `/account` area. Extends (does not replace) the Sprint 6 auth bridge files. |
+| Sprint 7.1 | User Area — profile page, addresses, account dashboard shell, orders placeholder, wishlist placeholder. Not to be confused with the already-shipped "Sprint 7.1 — Edit Product" above — see ADR-020. |
+| Sprint 7.2 | Cart & Session Continuity — scope to be defined later; expected to cover cart merge on login. No `cart`/`cart_items` table exists yet, so this likely needs a schema decision first. |
 | Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
 
-**Do NOT implement** Stripe, or AI search until the relevant sprint begins.
+**Do NOT implement** Sprint 7.1, 7.2, Stripe, or AI search until the relevant sprint begins.
 
 ---
 
@@ -92,7 +94,7 @@ Closed out everything Sprint 6.1 (partial) and Sprint 7.1 left pending: `Product
 
 ```
 src/
-├── proxy.ts              ← Next 16's renamed middleware.ts. Optimistic gate on /admin/:path* — redirects to /admin/login if no session. NOT the security boundary (RLS is) — see ADR-013/014.
+├── proxy.ts              ← Next 16's renamed middleware.ts. Optimistic gate on /admin/:path* (→ /admin/login) and /checkout + /account/:path* (→ /login, Sprint 7.0), session-only checks. NOT the security boundary (RLS is) — see ADR-013/014.
 ├── app/
 │   ├── admin/
 │   │   ├── layout.tsx    ← Server wrapper → <AdminShell>
@@ -111,7 +113,11 @@ src/
 │   │   └── settings/     ← Stub
 │   ├── products/         ← Listing + detail pages (live Supabase data)
 │   ├── cart/              ← Cart page (Zustand state)
-│   ├── login/             ← Storefront login UI stub — untouched on purpose, for the future Sprint 7 Authentication to wire up (see ADR-014)
+│   ├── login/             ← Storefront register/login (Sprint 7.0) — actions.ts (signup, login), page.tsx wires the register/login toggle via useActionState. Google OAuth button calls signInWithOAuth client-side.
+│   ├── forgot-password/   ← Password reset request (Sprint 7.0) — actions.ts (requestPasswordReset), page.tsx
+│   ├── auth/
+│   │   ├── callback/      ← Route Handler (Sprint 7.0) — shared code-exchange for OAuth and password-recovery links, `next` query param picks the post-exchange destination
+│   │   └── reset-password/← Set new password under the recovery session (Sprint 7.0) — actions.ts (resetPassword), page.tsx
 │   ├── page.tsx           ← Homepage
 │   └── layout.tsx         ← Root layout (fonts, providers)
 │
@@ -127,7 +133,7 @@ src/
 │
 ├── lib/
 │   ├── auth/
-│   │   └── dal.ts        ← verifyAdminSession (redirects — for Server Components) and getAdminUser (no redirect — for Server Actions mid-mutation)
+│   │   └── dal.ts        ← verifyAdminSession/getAdminUser (admin) plus verifySession/getUser (customer, Sprint 7.0) — same redirect-vs-no-redirect split for each pair
 │   ├── supabase/
 │   │   ├── queries/
 │   │   │   ├── products.ts        ← Storefront reads (plain client, SSG-safe, is_active=true only)
@@ -152,7 +158,7 @@ src/
 
 1. **Never rebuild** what already exists. Improve, extend, or fix existing code.
 2. **Server Components by default**. Add `"use client"` only at the component that actually needs browser APIs (`useState`, `useEffect`, `usePathname`, etc.).
-3. **Admin auth exists, but it's a minimal bridge, not full Authentication**. `/admin/*` is gated by `src/proxy.ts` + admin-only sign-in at `/admin/login` (Sprint 6, ADR-014) — no OAuth, no register, no customer accounts. Don't build those into the bridge; Sprint 7 replaces it properly. Storefront `/login` is still an untouched UI stub, left that way on purpose.
+3. **Admin auth is still a minimal bridge** (Sprint 6, ADR-014) — `/admin/*` is gated by `src/proxy.ts` + admin-only sign-in at `/admin/login`, no OAuth, no register, no customer accounts, and that's intentional; it's a separate concern from customer auth. **Customer auth is real as of Sprint 7.0** — storefront `/login` wires real registration, email/password login, and Google OAuth via `src/app/login/actions.ts`; `src/proxy.ts` also gates `/checkout` and `/account/*` for customer sessions (optimistic check only, same posture as the admin gate).
 4. **Product CRUD is complete**: Create (Sprint 6), Read/List (Sprint 6.1), Edit (Sprint 7.1), and Delete/Archive/Restore/Duplicate + image upload (Sprint 6.1 remaining) are all real, RLS-gated, no service-role key. AI-assisted content quality analysis is still Sprint 9 — Product Quality scoring today is deterministic, not AI (see ADR-018).
 5. **No service-role key anywhere, ever** (ADR-013). Admin writes are authorized entirely through RLS (`get_my_role() IN ('staff','admin')`) on the normal cookie-based/browser Supabase client. If a new admin mutation needs a write path that doesn't exist yet, add the RLS policy — do not reach for `SUPABASE_SERVICE_ROLE_KEY`.
 6. **Error handling in data queries**: all query functions `try/catch` and return `[]` or `null` on failure. The build must never fail due to DB connectivity.
@@ -238,12 +244,13 @@ src/
 
 ## Next Priority
 
-**Sprint 6.1 is fully complete.** Product CRUD (Create/Read/Update/Delete), Archive/Restore/Duplicate, image upload, and Product Quality scoring are all real and RLS-gated. What's left, in rough priority order:
+**Sprint 7.0 (Authentication Foundation) is complete.** Customer register/login (email+password and Google OAuth), password reset, session-aware Navbar, and protected-route scaffolding for `/checkout` and `/account/*` are all real. What's left, in rough priority order:
 
 - A dedicated Media Library so a previously-uploaded image can be reused across products, rather than uploaded fresh each time (not yet scheduled to a sprint)
-- **Sprint 7 — Full Authentication** extends, not replaces, the Sprint 6 auth bridge (`src/proxy.ts`, `src/lib/auth/dal.ts`, `src/lib/supabase/{client,server,middleware}.ts`): customer accounts, register, Google OAuth (`supabase.auth.signInWithOAuth`), `/auth/callback/route.ts`, password reset, session-aware Navbar, protected `/account/*` area, cart merge on login. The existing storefront `/login` page (Google OAuth button, register toggle) was left as-is specifically so this sprint can wire it up rather than rebuild it.
+- **Sprint 7.1 — User Area**: profile page, addresses, account dashboard shell, orders placeholder, wishlist placeholder — the pages that now sit behind Sprint 7.0's `/account/*` proxy gate.
+- **Sprint 7.2 — Cart & Session Continuity**: scope to be defined later; expected to cover cart merge on login, pending a schema decision (no `cart`/`cart_items` table exists yet).
 
-Do NOT start Sprint 7 work without explicit user instruction.
+Do NOT start Sprint 7.1 or 7.2 work without explicit user instruction.
 
 ---
 
