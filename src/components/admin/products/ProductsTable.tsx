@@ -11,6 +11,7 @@ interface Props {
   loading: boolean;
   filtersActive: boolean;
   onClearFilters: () => void;
+  onProductChanged: () => void;
 }
 
 const SKELETON_ROWS = 6;
@@ -46,7 +47,7 @@ function SkeletonRow() {
   );
 }
 
-export default function ProductsTable({ products, loading, filtersActive, onClearFilters }: Props) {
+export default function ProductsTable({ products, loading, filtersActive, onClearFilters, onProductChanged }: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
       <div className="overflow-x-auto">
@@ -119,7 +120,7 @@ export default function ProductsTable({ products, loading, filtersActive, onClea
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <ProductActionsMenu product={product} />
+                      <ProductActionsMenu product={product} onChanged={onProductChanged} />
                     </td>
                   </tr>
                 );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/types";
 import ProductsToolbar from "./ProductsToolbar";
 import ProductsTable from "./ProductsTable";
@@ -47,6 +47,19 @@ export default function ProductsView() {
     [categories, category]
   );
 
+  const fetchProducts = useCallback(
+    () =>
+      getAdminProducts({
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch,
+        categoryId,
+        status: status === "All" ? undefined : status,
+        featuredOnly,
+      }),
+    [page, debouncedSearch, categoryId, status, featuredOnly]
+  );
+
   useEffect(() => {
     // A specific category is selected but categories haven't resolved yet —
     // wait rather than fetching unfiltered results for a moment.
@@ -55,14 +68,7 @@ export default function ProductsView() {
     let cancelled = false;
     setLoading(true);
 
-    getAdminProducts({
-      page,
-      pageSize: PAGE_SIZE,
-      search: debouncedSearch,
-      categoryId,
-      status: status === "All" ? undefined : status,
-      featuredOnly,
-    }).then(({ products, totalCount }) => {
+    fetchProducts().then(({ products, totalCount }) => {
       if (cancelled) return;
       setProducts(products);
       setTotalCount(totalCount);
@@ -72,7 +78,16 @@ export default function ProductsView() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, category, categoryId, status, featuredOnly]);
+  }, [fetchProducts, category, categoryId]);
+
+  // Passed down to each row's ProductActionsMenu so Delete/Archive can
+  // refresh the list in place after a mutation, without a full page
+  // reload or duplicating the fetch logic above.
+  const refetch = useCallback(async () => {
+    const { products, totalCount } = await fetchProducts();
+    setProducts(products);
+    setTotalCount(totalCount);
+  }, [fetchProducts]);
 
   const categoryNames = useMemo(
     () => ["All", ...categories.map((c) => c.name).sort()],
@@ -108,6 +123,7 @@ export default function ProductsView() {
         loading={loading}
         filtersActive={filtersActive}
         onClearFilters={clearFilters}
+        onProductChanged={refetch}
       />
       <ProductsPagination
         page={page}

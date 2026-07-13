@@ -10,6 +10,7 @@ import {
   zodErrorsToFieldErrors,
   type ProductFormState,
 } from "@/components/admin/products/studio/validation";
+import { syncProductImages } from "@/components/admin/products/studio/images";
 
 export async function updateProduct(
   id: string,
@@ -107,6 +108,15 @@ export async function updateProduct(
         message: "Product details were saved, but SEO information failed to save — please try again.",
       };
     }
+  }
+
+  // Called unconditionally (unlike Create) — an edit may remove every
+  // image from a product that previously had some, and syncProductImages'
+  // delete-then-insert needs to run even when the new list is empty for
+  // that removal to actually take effect.
+  const { error: imagesError } = await syncProductImages(supabase, id, data.images);
+  if (imagesError) {
+    return { ok: false, message: imagesError };
   }
 
   revalidatePath("/admin/products");

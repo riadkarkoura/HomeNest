@@ -257,5 +257,56 @@ The no-rollback decision is a deliberate asymmetry with ADR-015, not an oversigh
 
 ---
 
+## ADR-017 — Long-term vision: AI-native commerce operating system
+**Date:** 2026-07-12
+**Status:** Accepted (strategic — not a sprint, not an implementation instruction)
+
+**Decision:** HomeNest's long-term direction is not a traditional ecommerce platform run by staff. It's an AI-native commerce operating system, where the human owner's role narrows over time to: selecting products, approving important AI decisions, monitoring analytics, and setting business strategy. Specialized AI agents (Product Research, Product Import, Product Optimization, SEO, Pricing, Image Generation, Marketing, Advertising, Email Campaigns, Social Media, Customer Support, Inventory, Analytics, Operations) are the eventual target for everything else. The full statement lives in `PROJECT_VISION.md` — this ADR records it as a durable architectural constraint rather than duplicating the vision text.
+
+**Reason:** Stated by the project owner as the long-term goal, ahead of Sprint 7.2. Recording it as an ADR — not just a paragraph in the vision doc — makes it something every future technical decision gets checked against, the same way ADR-013 (no service-role key) or ADR-015 (no RPC yet) already constrain how features get built.
+
+**Consequence:** Every future feature should be designed with a clean AI integration point — a server-side entry a future agent could call — even while it's built and used by a human today. This is a design lens, not new scope: it adds no AI sprint, changes no line of `docs/ROADMAP.md`, and authorizes no agent-facing capability ahead of its scheduled sprint. The current roadmap (Sprint 6.1 remaining, Sprint 7 Full Authentication, Sprint 8 Payments, Sprint 9 AI Search, Sprint 7.2 pending approval) is unaffected.
+
+**Alternatives considered:**
+- Keep this as prose only in `PROJECT_VISION.md`, no ADR — rejected; this project already treats strategic/architectural commitments as ADR-worthy (e.g. ADR-014's auth-bridge scoping), and a vision this consequential to future feature design warrants the same traceability.
+
+---
+
+## ADR-018 — Sprint 6.1 remaining: Delete/Archive/Restore/Duplicate reuse existing RLS; image upload gets new RLS; quality scoring is deterministic, not AI
+**Date:** 2026-07-12
+**Status:** Accepted
+
+**Decision:** Four things closed out Sprint 6.1:
+
+1. **Delete is a soft delete** (`deleted_at`), reusing the `products_staff_update` policy from migration 006 — not the narrow `products_staff_delete` policy from migration 005, which stays scoped to Create's compensating rollback (ADR-015) and is never used for a general admin delete. `getAdminProducts()` already filtered `deleted_at IS NULL` before this sprint, so no query changes were needed.
+2. **Archive/Restore/Duplicate also reuse existing RLS** — Archive and Restore call `statusToColumns("Archived"/"Active")` (`src/components/admin/products/studio/validation.ts`), the same mapping `createProduct`/`updateProduct` already use, so the row-menu shortcuts and editing a product's status dropdown by hand always agree. Duplicate reuses `products_staff_insert` (migration 005). None of the three needed a new migration.
+3. **Image upload needed three new write policies** (migration 007): `media` and `product_images` had SELECT-only staff access before this sprint — the same kind of gap ADR-016 closed for `products`/`seo_metadata` UPDATE — plus new `storage.objects` policies for the `products` bucket, since Storage RLS defaults to deny like every other table. The bucket itself is created by the migration (idempotent `INSERT ... ON CONFLICT DO NOTHING`) rather than only declared in `supabase/config.toml`, since config.toml's bucket block is a local-dev convenience and isn't applied by `db push` to the linked remote project. The Studio's save flow (`src/components/admin/products/studio/images.ts`) replaces a product's entire `product_images` set on every save (delete all, then re-insert the current draft's list) instead of diffing add/remove/reorder — same "no transaction, keep it simple" posture as ADR-015/ADR-016. This also sidesteps `product_images`' partial unique index on `is_primary`: the table is fully cleared before the fresh batch insert, so two rows can never claim `is_primary = true` for the same product mid-save. The original 8 seed products have `product_images` rows with `media_id = NULL` (Unsplash URLs, no backing `media` row) — `ProductDraft.images[].id` is `string | null` specifically so those legacy rows round-trip through an edit instead of being silently deleted the next time someone saves an unrelated field on one of those products.
+4. **Product Quality scoring is deterministic field-completeness heuristics** (`src/components/admin/products/studio/scoring.ts`) — title/description length bands, SEO field presence against the same 60/160-character limits `CharacterCounter` already enforces, image count — not an AI call. `ScoreCard` renders scores using stone/amber only (no green "good" or red "bad" state), per `DESIGN_SYSTEM.md` §15.
+
+**Reason:** All four follow the pattern ADR-013 established (no `SUPABASE_SERVICE_ROLE_KEY`, every new admin write path gets its own explicit `get_my_role() IN ('staff','admin')` RLS policy where one doesn't already exist) and the "keep it simple, no transaction" posture ADR-015/ADR-016 established for multi-table writes. Scoring is explicitly kept non-AI per ADR-017: real computed scores now, AI-assisted content analysis stays scoped to Sprint 9's AI Assistant panel, unchanged and still disabled.
+
+**Consequence:** `ProductActionsMenu`'s row menu is now fully wired (View/Edit/Duplicate/Archive-or-Restore/Delete). The Media section's video dropzone remains a placeholder — `product_videos` is a separate table/sprint, not part of this pass. Removing an image from the Studio never deletes its Storage object or `media` row (only the `product_images` link), so re-adding a recently-removed image would currently require re-uploading it — acceptable for this pass; revisit with a dedicated Media Library (ROADMAP-adjacent, not yet scheduled) if reusing previously-uploaded images becomes a real workflow.
+
+**Alternatives considered:**
+- A general-purpose hard-DELETE policy for products — rejected; DATABASE.md §1 mandates soft deletes specifically because `order_items.product_id` and other tables reference products and must survive deletion for order history.
+- Diffing `product_images` add/remove/reorder against the database instead of delete-then-reinsert — rejected as more complexity than this feature's volume justifies, same reasoning ADR-015 used for Create's two-table write.
+- Wiring `ProductQualitySection` to Claude now instead of Sprint 9 — rejected per ADR-017 and the explicit "Do NOT implement AI search until the relevant sprint begins" instruction; deterministic scoring satisfies ROADMAP's Sprint 6.1 "real computed scores" requirement without pulling AI scope forward.
+
+---
+
+## ADR-018 — Sprint 6.1 (remaining): ProductActionsMenu wiring reuses existing RLS, no new migration
+**Date:** 2026-07-12
+**Status:** Accepted
+
+**Decision:** Wiring View/Duplicate/Archive/Restore/Delete on the Products list row menu (`src/app/admin/products/actions.ts`) required no new RLS policy. `archiveProduct`/`restoreProduct` are plain `UPDATE`s (via `statusToColumns`, shared with Create/Edit) covered by `products_staff_update` (migration 006). `duplicateProduct` is a plain `INSERT` covered by `products_staff_insert` (migration 005). `deleteProduct` is a **soft** delete (`UPDATE ... SET deleted_at = now()`) — also covered by `products_staff_update`, deliberately not the narrower `products_staff_delete` policy from migration 005, which stays scoped to Create's compensating rollback. This is the same soft-delete-via-`deleted_at` choice discussed for the (still-pending) Sprint 7.2 proposal, applied here to the smaller Sprint 6.1 (remaining) scope.
+
+**Reason:** `docs/DATABASE.md` §1 names `products` explicitly under "Soft deletes where data has value" — a hard `DELETE` would also orphan `order_items.product_id` history once orders exist. Reusing `products_staff_update` rather than adding a new policy keeps the RLS surface minimal, consistent with every prior sprint's practice of adding only the policy a feature actually needs.
+
+**Consequence:** Archive and Restore are symmetric one-click actions (`archiveProduct`/`restoreProduct`), each hidden from the row menu when it would be a no-op (Archive only shown when Active, Restore only when Archived) — a product's status can still be set directly via the Edit Studio's Organization section regardless, this is just the shortcut. Duplicate always lands as a Draft, never inheriting the source product's live/featured state, so a duplicate never accidentally goes live unreviewed.
+
+**Scope note:** This is Sprint 6.1 (remaining)'s row-menu wiring only — single-row actions, native `window.confirm` for the one destructive action (Delete), no bulk operations, no dedicated confirmation-dialog component. The fuller Sprint 7.2 proposal (bulk selection, bulk archive/delete, a styled `ConfirmDialog` reused across every destructive action) remains separate and still pending approval; this ADR does not supersede that discussion, it resolves the identical delete-semantics question for the smaller scope that shipped first.
+
+---
+
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-12*
+*Last updated: 2026-07-13*

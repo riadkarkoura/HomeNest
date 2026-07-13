@@ -21,7 +21,7 @@
 
 **Version:** 0.1.0  
 **Status:** Phase 0 — Frontend Foundation complete; Phase 1 (Backend) in progress  
-**Date:** 2026-07-12
+**Date:** 2026-07-13
 
 ### What's live
 
@@ -35,6 +35,7 @@
 - **Minimal admin-only sign-in** at `/admin/login`, protecting `/admin/*` (Sprint 6 — temporary bridge, not full Authentication)
 - **Live, paginated, filterable Products list** at `/admin/products` (Sprint 6.1, partial) — real Supabase reads, no static data
 - **Product Edit** at `/admin/products/[id]/edit` (Sprint 7.1) — reuses the Add Product Studio entirely
+- **Product Delete (soft), Archive/Restore, Duplicate, image upload to Supabase Storage, and real Product Quality scoring** (Sprint 6.1 — now fully complete) — see Sprint History below
 - Zustand cart with localStorage persistence
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
@@ -42,11 +43,10 @@
 ### What's not yet live
 
 - Full Authentication (customer accounts, OAuth, register, password reset) — the storefront `/login` page is still a UI stub
-- Product delete, image upload, quality scoring (Sprint 6.1, remaining)
 - Payments (Stripe, PayPal)
 - Orders system
 - AI-powered search (Claude API)
-- Supabase Storage for media
+- A dedicated Media Library (reusing a previously-uploaded image across products) — each product's images are uploaded fresh today
 
 ---
 
@@ -166,7 +166,7 @@ Sprints 6 and 7 were swapped from the original plan at explicit user instruction
 Until step 1–2 are done, every sign-in attempt at `/admin/login` will correctly fail — that's RLS and the auth bridge working as designed, not a bug.
 
 ### Sprint 6.1 (partial) — Live Products list
-**Status:** ✅ Complete — list/read only; delete, image upload, and quality scoring remain (see Sprint 6.1 remaining, below)
+**Status:** ✅ Complete — list/read only; delete, image upload, and quality scoring shipped afterward (see Sprint 6.1 remaining, below)
 
 - `src/lib/supabase/queries/admin-products.ts` (new) — `getAdminProducts()` (paginated, filtered, sorted, RLS-gated via `products_staff_select_all`, browser client) and `getAdminCategories()`
 - `src/components/admin/products/status.ts` — `getProductStatus()` now derives Active/Draft/Archived from real `is_active`/`published_at`, replacing the hardcoded id-keyed placeholder map from Sprint 5
@@ -184,18 +184,18 @@ Shipped ahead of Sprint 7 (Full Authentication) — same kind of out-of-order nu
 - `src/app/admin/products/[id]/edit/actions.ts` (new) — `updateProduct(id, prevState, draft)`, wired via `updateProduct.bind(null, id)` so it matches the `(prevState, draft)` shape `useActionState` expects from `ProductStudio`; `.update()` on `products`, `.upsert()` on `seo_metadata` (its `UNIQUE(entity_type, entity_id)` constraint makes upsert the natural fit for "may or may not already have SEO content")
 - `src/components/admin/products/studio/validation.ts` (new) — `ProductDraftSchema`, `statusToColumns`, `zodErrorsToFieldErrors` extracted out of `new/actions.ts` so Create and Edit validate identically instead of via two hand-kept-in-sync copies; `new/actions.ts` is behaviorally unchanged, only its schema's *location* moved
 - Migration `20260712000002_product_edit_write_access.sql` — `products_staff_update` and `seo_metadata_staff_update` RLS policies, same `get_my_role() IN ('staff','admin')` pattern as ADR-013. Neither existed before this sprint — editing was blocked at the database regardless of application code (see ADR-016)
-- `ProductActionsMenu`'s Edit item now links to the new route; View/Duplicate/Archive/Delete remain presentational (Sprint 6.1 remaining, below)
+- `ProductActionsMenu`'s Edit item now links to the new route; View/Duplicate/Archive/Delete shipped next (Sprint 6.1 remaining, below)
 - No rollback-on-partial-failure for the `seo_metadata` write, unlike Create's compensating delete — the product row already existed before the edit started, so there's no equivalent "delete what didn't exist a moment ago." A failed SEO write returns an honest partial-success message instead (see ADR-016)
 
-## 3. Upcoming Sprints
-
 ### Sprint 6.1 (remaining) — Delete, images, scoring
-**Goal:** The rest of admin product management — list and edit are done (see Sprint History)
+**Status:** ✅ Complete — Sprint 6.1 is now fully done
 
-**Tasks:**
-- [ ] Replace `ProductQualitySection`'s placeholder score tiles with real computed scores (Title/Description/SEO/Images/Overall)
-- [ ] Wire the remaining `ProductActionsMenu` items (View / Duplicate / Archive / Delete) — same RLS-gated Server Action pattern as Create/Edit (ADR-013), no service-role key; Delete needs its own RLS `DELETE` policy (the one that exists today is scoped narrowly to Create's compensating rollback, not general use)
-- [ ] Image upload to Supabase Storage (products bucket) — replaces the static Media dropzone placeholders; bucket → `media` row → `product_images` row per `docs/DATABASE.md` §7
+- **Delete** — soft delete (`deleted_at`), reusing the existing `products_staff_update` RLS policy rather than a new general-purpose hard-DELETE grant (DATABASE.md §1 mandates soft deletes for products). `src/app/admin/products/actions.ts` (new) — `deleteProduct`, plus `archiveProduct`/`restoreProduct` (both reuse `statusToColumns`) and `duplicateProduct` (reuses `products_staff_insert`). `ProductActionsMenu` now shows Archive or Restore depending on the row's current status, and every item is wired: View (opens the storefront page), Edit, Duplicate (navigates to Edit on the new product), Archive/Restore, Delete (with a confirm step)
+- **Image upload** — real upload replaces the static Media dropzone. `src/app/admin/products/media-actions.ts` (new) — `uploadProductImage` writes to the `products` Storage bucket, then a `media` row. `src/components/admin/products/studio/images.ts` (new) — `syncProductImages`, called from both `createProduct` and `updateProduct`, replaces a product's entire `product_images` set on every save rather than diffing. Migration `20260712000003_product_images_write_access.sql` creates the `products` bucket and adds the `storage.objects`/`media`/`product_images` staff policies that didn't exist before (see ADR-018). `ProductDraft` gained an `images` field; `next.config.ts` now whitelists the Supabase Storage hostname for `next/image`
+- **Product Quality scoring** — `src/components/admin/products/studio/scoring.ts` (new) — `computeProductQualityScores()`, deterministic field-completeness heuristics (not AI), covering Title/Description/SEO/Images/Overall. `ScoreCard` now renders a real 0–100 score in stone/amber only, no green/red
+- See ADR-018 for the full reasoning behind reusing existing RLS for Delete/Archive/Restore/Duplicate vs. the new policies image upload required
+
+## 3. Upcoming Sprints
 
 ### Sprint 7 — Full Authentication
 **Goal:** Customer accounts, on top of the Sprint 6 admin-only bridge
@@ -266,5 +266,5 @@ HomeNest's mission is to become one of the best Smart Home Solutions ecommerce e
 
 ---
 
-*Last updated: 2026-07-12*  
+*Last updated: 2026-07-13*  
 *Maintained by: Lead Product Engineer*

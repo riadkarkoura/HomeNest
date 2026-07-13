@@ -5,6 +5,20 @@ export interface Benefit {
   text: string;
 }
 
+// One row per uploaded image, in display order — array position is the
+// gallery sort order, and the first entry is always the primary/thumbnail
+// image. No separate sortOrder/isPrimary fields on the draft itself, so
+// there's nothing that can drift out of sync with the array's own order.
+export interface ProductImage {
+  // media.id for anything uploaded through the Studio. Null for the
+  // original seed catalogue's product_images rows, which point directly
+  // at Unsplash URLs with no backing media row (see CLAUDE_CONTEXT.md
+  // Database Status) — kept editable/reorderable/removable like any other
+  // image rather than silently dropped on the next save.
+  id: string | null;
+  url: string; // media.cdn_url (or the legacy Unsplash URL), denormalized for immediate <img> rendering
+}
+
 export interface ProductDraft {
   title: string;
   slug: string;
@@ -22,6 +36,7 @@ export interface ProductDraft {
   metaTitle: string;
   metaDescription: string;
   keywords: string[];
+  images: ProductImage[];
 }
 
 // Matches the categories already present in src/lib/products.ts / the `Category` type,
@@ -54,6 +69,7 @@ export function createEmptyDraft(): ProductDraft {
     metaTitle: "",
     metaDescription: "",
     keywords: [],
+    images: [],
   };
 }
 

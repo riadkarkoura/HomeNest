@@ -51,7 +51,7 @@ export default function ProductStudio({ initialDraft, action = createProduct }: 
   return (
     <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-6">
       <motion.div variants={fadeUp}>
-        <ProductQualitySection />
+        <ProductQualitySection draft={draft} />
       </motion.div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -83,7 +83,7 @@ export default function ProductStudio({ initialDraft, action = createProduct }: 
             <OrganizationSection draft={draft} onChange={update} errors={state.errors} />
           </motion.div>
           <motion.div variants={fadeUp}>
-            <MediaSection />
+            <MediaSection draft={draft} onChange={update} />
           </motion.div>
           <motion.div variants={fadeUp}>
             <AIAssistantPanel />

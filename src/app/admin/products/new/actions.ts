@@ -10,6 +10,7 @@ import {
   zodErrorsToFieldErrors,
   type ProductFormState,
 } from "@/components/admin/products/studio/validation";
+import { syncProductImages } from "@/components/admin/products/studio/images";
 
 export async function createProduct(
   _prevState: ProductFormState,
@@ -97,6 +98,17 @@ export async function createProduct(
         console.error("[createProduct] rollback delete failed — orphaned product row", product.id, rollbackError);
       }
       return { ok: false, message: "Something went wrong saving this product. Nothing was published." };
+    }
+  }
+
+  // Unlike the seo_metadata step above, an images failure does not roll
+  // back the product — same partial-success posture ADR-016 established
+  // for Edit's seo_metadata write, rather than compounding Create's
+  // rollback-on-failure behavior onto a third table.
+  if (data.images.length > 0) {
+    const { error: imagesError } = await syncProductImages(supabase, product.id, data.images);
+    if (imagesError) {
+      return { ok: false, message: imagesError };
     }
   }
 

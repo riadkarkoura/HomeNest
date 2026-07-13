@@ -32,6 +32,12 @@ type SeoRow = {
   keywords: string[] | null;
 };
 
+type ProductImageRow = {
+  media_id: string | null;
+  cdn_url: string;
+  sort_order: number;
+};
+
 function toPriceString(value: number | string | null): string {
   return value != null ? String(Number(value)) : "";
 }
@@ -62,6 +68,14 @@ export async function getAdminProductForEdit(id: string): Promise<Partial<Produc
 
     const seoRow = seo as unknown as SeoRow | null;
 
+    const { data: images } = await supabase
+      .from("product_images")
+      .select("media_id, cdn_url, sort_order")
+      .eq("product_id", id)
+      .order("sort_order", { ascending: true });
+
+    const imageRows = (images ?? []) as unknown as ProductImageRow[];
+
     const category = row.categories?.name;
 
     return {
@@ -81,6 +95,7 @@ export async function getAdminProductForEdit(id: string): Promise<Partial<Produc
       metaTitle: seoRow?.title ?? "",
       metaDescription: seoRow?.description ?? "",
       keywords: seoRow?.keywords ?? [],
+      images: imageRows.map((image) => ({ id: image.media_id, url: image.cdn_url })),
     };
   } catch (err) {
     console.error("[getAdminProductForEdit]", err);

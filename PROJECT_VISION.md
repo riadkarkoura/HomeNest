@@ -15,6 +15,52 @@ We sell solutions.
 
 ---
 
+## Long-Term Vision — AI-Native Commerce Operating System
+
+HomeNest is not building toward a traditional ecommerce platform.
+
+The long-term goal is an **AI-native commerce operating system**, where the human owner acts primarily as **Project Manager and final decision maker** — not as the person running day-to-day operations.
+
+Eventually, the owner should only need to:
+
+- Select products
+- Approve important AI decisions
+- Monitor analytics
+- Define business strategy
+
+Everything else — research, execution, optimization — should gradually become AI-driven.
+
+### What this means for how we build
+
+Every future feature must be designed with **AI integration points**, so a specialized AI agent can automate it later without a major architectural rewrite. This does not mean building AI now. It means not building in a way that blocks AI later — for example, favoring a clean server-side entry point a future agent could call over a human-only UI flow with no equivalent path in.
+
+### Future specialized AI agents (architecture target, not a build order)
+
+The platform should eventually support dedicated agents for:
+
+- Product Research
+- Product Import
+- Product Optimization
+- SEO
+- Pricing
+- Image Generation
+- Marketing
+- Advertising
+- Email Campaigns
+- Social Media
+- Customer Support
+- Inventory
+- Analytics
+- Operations
+
+### What does NOT change
+
+- The customer-facing storefront stays a premium ecommerce experience (Problem → Solution → Benefits → Reviews → Purchase). What stops being "traditional" is *who runs the business behind it*, not what customers see.
+- This is strategic direction, not a sprint. `docs/ROADMAP.md` is unaffected by this vision — no AI sprint is added by it.
+- Nothing here authorizes building AI now. Treat it as a lens for design decisions — does this leave room for an agent later? — not a task list.
+
+---
+
 ## Brand Personality
 
 - Premium

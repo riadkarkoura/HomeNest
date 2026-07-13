@@ -1335,7 +1335,7 @@ Staff              → extended read access for customer support
 Admin              → full access (uses service_role key server-side)
 ```
 
-**Deviation (Sprint 6/7.1, migrations 005–006):** Product Create and Edit do not use the service_role key at all — see ADR-013/ADR-016. `products` and `seo_metadata` gained explicit `get_my_role() IN ('staff','admin')` write policies (INSERT on both — migration 005; UPDATE on both — migration 006; DELETE on `products`, scoped to Create's compensating rollback — migration 005) instead of relying on the service_role bypass above. Any future admin write path built the same way (Server Action + cookie-based client) needs the same treatment — the "Admin → service_role bypass" assumption only holds for code that actually uses the service_role key.
+**Deviation (Sprint 6/7.1/6.1-remaining, migrations 005–007):** Product Create, Edit, Delete, Archive/Restore, Duplicate, and image upload do not use the service_role key at all — see ADR-013/ADR-016/ADR-018. `products` and `seo_metadata` gained explicit `get_my_role() IN ('staff','admin')` write policies (INSERT on both — migration 005; UPDATE on both — migration 006; DELETE on `products`, scoped to Create's compensating rollback — migration 005). `media` and `product_images` gained the same staff/admin INSERT (migration 007); `product_images` also gained staff/admin UPDATE/DELETE (migration 007), used by the Studio's "replace the image set on every save" sync helper. `storage.objects` gained staff/admin INSERT/DELETE scoped to `bucket_id = 'products'` (migration 007) — Storage RLS defaults to deny the same as every table here, so upload was blocked without it regardless of the table-level policies. Any future admin write path built the same way (Server Action + cookie-based client) needs the same treatment — the "Admin → service_role bypass" assumption only holds for code that actually uses the service_role key.
 
 ### Policy Summary
 
@@ -1344,7 +1344,7 @@ Admin              → full access (uses service_role key server-side)
 | `categories` | SELECT | SELECT | SELECT | ALL |
 | `products` | SELECT (active only) | SELECT | SELECT + INSERT + UPDATE² + DELETE¹ | ALL |
 | `product_variants` | SELECT | SELECT | SELECT | ALL |
-| `product_images` | SELECT | SELECT | SELECT | ALL |
+| `product_images` | SELECT | SELECT | SELECT + INSERT³ + UPDATE³ + DELETE³ | ALL |
 | `product_videos` | SELECT | SELECT | SELECT | ALL |
 | `tiktok_assets` | SELECT (approved only) | SELECT | SELECT | ALL |
 | `problem_tags` | SELECT | SELECT | SELECT | ALL |
@@ -1372,11 +1372,13 @@ Admin              → full access (uses service_role key server-side)
 | `feature_flags` | SELECT | SELECT | SELECT | ALL |
 | `audit_log` | NONE | NONE | SELECT | SELECT |
 | `ai_generated_content` | NONE | NONE | SELECT | ALL |
-| `media` | SELECT | NONE | SELECT | ALL |
+| `media` | SELECT | NONE | SELECT + INSERT³ | ALL |
 
 ¹ Added in migration 005 (Sprint 6), for the Product Create Server Action — see ADR-013. `WITH CHECK (public.get_my_role() IN ('staff', 'admin'))`, no service_role key involved.
 
 ² Added in migration 006 (Sprint 7.1), for the Product Edit Server Action (`updateProduct`) — see ADR-016. Same pattern, same posture: `WITH CHECK (public.get_my_role() IN ('staff', 'admin'))`, no service_role key.
+
+³ Added in migration 007 (Sprint 6.1 remaining), for real image upload — see ADR-018. Same `get_my_role() IN ('staff', 'admin')` pattern. Migration 007 also adds matching `storage.objects` INSERT/DELETE policies scoped to `bucket_id = 'products'` (not a table in this list, but gates the same upload path) and creates the `products` Storage bucket itself (public, 10MiB limit, image/webp+jpeg+png+avif only), matching the bucket already declared in `supabase/config.toml`.
 
 ### Key Policies (Detail)
 
@@ -1751,5 +1753,5 @@ Tables must be created in dependency order to satisfy foreign key constraints:
 ---
 
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-11*
+*Last updated: 2026-07-13*
 *Next review: before writing the first Supabase migration*

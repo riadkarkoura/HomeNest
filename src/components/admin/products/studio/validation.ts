@@ -45,6 +45,7 @@ export const ProductDraftSchema = z.object({
   metaTitle: z.string().trim().max(60, "Meta title must be 60 characters or fewer."),
   metaDescription: z.string().trim().max(160, "Meta description must be 160 characters or fewer."),
   keywords: z.array(z.string()),
+  images: z.array(z.object({ id: z.string().nullable(), url: z.string() })),
 });
 
 export interface ProductFormState {
