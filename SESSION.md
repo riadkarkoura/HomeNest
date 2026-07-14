@@ -1,8 +1,8 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 7.2 — Cart & Session Continuity — schema phase complete, application-level work not yet
-scoped or started. Sprint 7.1 (User Area) is complete.
+Sprint 7.2 — Cart & Session Continuity — ✅ COMPLETE (schema + application layer). Sprint 7.1
+(User Area) is also complete.
 
 ## Last Completed
 - ✅ Product Create
@@ -32,6 +32,17 @@ scoped or started. Sprint 7.1 (User Area) is complete.
 - ✅ Found and fixed a real Base UI bug: `DropdownMenuLabel` requires a `<DropdownMenuGroup>`
   wrapper (unlike Radix) — crashed the Navbar's account dropdown the first time it was ever
   opened with a live session
+- ✅ Navbar UX integration — My Account/Addresses/Orders/Wishlist links added to the account
+  dropdown and mobile panel (navigation only, no auth/logic changes)
+- ✅ `carts`/`cart_items` schema (migration `20260714000001_cart_schema.sql`, ADR-021) — normalized,
+  authenticated-only, `updated_at`/`added_at`/`source` columns, applied to the linked project
+- ✅ Cart & Session Continuity application layer (Sprint 7.2 Phase 2): `src/app/cart/actions.ts`
+  (`syncAddItem`/`syncUpdateQuantity`/`syncRemoveItem`/`syncClearCart`/`mergeGuestCart`/
+  `fetchServerCart`, all `getUser()`-scoped, no service-role key), `src/lib/supabase/queries/cart.ts`
+  (`getOrCreateActiveCart`/`getActiveCartItems`), `src/lib/store.ts` extended with `userId`/
+  `setUserId` so the existing Zustand cart merges a guest's local cart into the server on first
+  login, hydrates from the server on return visits/devices, and clears on sign-out — `CartDrawer.tsx`
+  and `src/app/cart/page.tsx` needed zero changes
 
 ## Current Status
 Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
@@ -41,14 +52,16 @@ session-aware Navbar, and manage their profile and addresses at `/account`. Orde
 are UI-only placeholders (no `orders`/`wishlist_items` data wired up — that's Sprint 8 and a
 future sprint respectively).
 
-**Sprint 7.2's schema decision is made and applied (2026-07-14, ADR-021):** `carts` + `cart_items`
-tables exist on the linked Supabase project (migration `20260714000001_cart_schema.sql`),
-normalized and structurally parallel to `orders`/`order_items`, server-persisted for
-authenticated users only, no price/name snapshot (cart reflects live product data),
-`cart_items.source` prepared for future `'ai'`/`'partner'` attribution. **Application-level work
-is not yet built**: no merge-on-login flow, no cart Server Actions, no Zustand/UI changes. The
-existing client-only Zustand + `localStorage` cart (`src/lib/store.ts`) is completely unchanged
-and still what the storefront actually uses today.
+**Sprint 7.2 is now fully complete (2026-07-14, ADR-021):** `carts` + `cart_items` tables exist on
+the linked Supabase project (migration `20260714000001_cart_schema.sql`), normalized and
+structurally parallel to `orders`/`order_items`, server-persisted for authenticated users only,
+no price/name snapshot (cart reflects live product data), `cart_items.source` prepared for future
+`'ai'`/`'partner'` attribution. **The application layer is also built and verified**: guests still
+use the existing client-only Zustand + `localStorage` cart (`src/lib/store.ts`) unchanged from the
+outside, but it now merges into the server cart on first login (folding local quantities into
+whatever's already there), hydrates from the server on every subsequent load/device for that
+account, and clears local state on sign-out so nothing leaks to the next person on a shared
+device. `CartDrawer.tsx` and `src/app/cart/page.tsx` required zero changes.
 
 ## Sprint 7.0 Verification (2026-07-13)
 
@@ -137,14 +150,36 @@ had clicks silently fail to register, on two different dev-server instances — 
 by an explicit `preview_resize` call. Unrelated to application code; noted here in case a future
 session hits the same thing and wastes time suspecting a real bug first.
 
+## Sprint 7.2 Phase 2 Verification (2026-07-14)
+
+Verified live against the linked Supabase project using the same permanent test account (per
+`TESTING.md` §1; credentials not stored anywhere):
+
+- **Guest → login merge — PASS.** Added items to the cart while signed out (localStorage only),
+  signed in, confirmed the same items appeared server-side in `cart_items` and stayed in the
+  Zustand store with no UI changes required.
+- **Cross-device/return-visit hydration — PASS.** Cleared `localStorage`'s cart items while
+  keeping the `homenest-cart-merged-user` flag, reloaded — both previously-added items came back
+  correctly from the server, confirming real server persistence and not just an optimistic client
+  cache.
+- **Add/update/remove/clear while authenticated — PASS.** Each action's Server Action fired and
+  the corresponding `cart_items` row was inserted/updated/deleted as expected; no desync observed
+  after repeated add/remove cycles.
+- **Sign-out clears local cart — PASS.** Confirmed the local cart empties and the merge flag is
+  removed on sign-out, so the next person on the same device/browser doesn't see the previous
+  account's items.
+- **Production build — PASS.** Clean TypeScript + ESLint after Phase 2 changes.
+- **Dev-overlay "5 Issues" badge — investigated, not a regression.** All five pre-existed Phase 2
+  (image `src` warnings seen earlier in the session, plus a Base UI `SheetClose` warning inside
+  `CartDrawer.tsx`, which Phase 2 never touched) — no fix applied, per "no unnecessary refactoring."
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 7.2 — Cart & Session Continuity, application layer. Schema is done (`carts`/`cart_items`,
-ADR-021). Remaining: merge-on-login flow, cart Server Actions (add/update/remove), Zustand/UI
-changes to read from the server cart for authenticated users. Needs its own implementation plan
-before coding — do NOT start without explicit user instruction — see docs/ROADMAP.md.
+Sprint 7.2 is complete (schema + application layer). Awaiting the user's next sprint direction —
+see `docs/ROADMAP.md`'s "Upcoming Sprints" for candidates. Do NOT start new work without explicit
+user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)

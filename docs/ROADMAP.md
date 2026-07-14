@@ -38,13 +38,12 @@
 - **Product Delete (soft), Archive/Restore, Duplicate, image upload to Supabase Storage, and real Product Quality scoring** (Sprint 6.1 — now fully complete) — see Sprint History below
 - **Customer authentication** — email/password register/login, Google OAuth, password reset, session-aware Navbar, protected `/checkout` and `/account/*` (Sprint 7.0)
 - **Customer Account hub** at `/account` — Profile, Addresses (full CRUD), Orders and Wishlist placeholders, designed to scale to Security/Invoices/Home Projects/Service Bookings/Home Documents/Warranty Files without a redesign (Sprint 7.1)
-- Zustand cart with localStorage persistence
+- **Cart & Session Continuity** — Zustand + localStorage cart for guests, automatically merged into a server-persisted `carts`/`cart_items` cart on login and kept continuously synced for authenticated users across devices (Sprint 7.2, ADR-021)
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
 
 ### What's not yet live
 
-- Cart merge on login (localStorage → server) — Sprint 7.2; schema (`carts`/`cart_items`) is designed and migrated (ADR-021), the merge flow itself is not yet built
 - Payments (Stripe, PayPal)
 - Orders system (real order data — today's `/account/orders` is a UI-only placeholder)
 - Wishlist data (real save-for-later — today's `/account/wishlist` is a UI-only placeholder)
@@ -227,16 +226,25 @@ Customer-facing account UI behind Sprint 7.0's protection. (Not to be confused w
 - No new RLS/migrations needed — `profiles` (own-row SELECT/UPDATE) and `addresses` (own-row ALL) policies already existed
 - A real bug (Base UI's `DropdownMenuLabel` requiring a `<DropdownMenuGroup>` wrapper, unlike Radix — crashed the Navbar's account dropdown the first time it was actually opened with a live session) was found and fixed in `src/components/layout/Navbar.tsx` during this sprint's verification, even though the dropdown itself was Sprint 7.0 code — it had never been click-tested with a real session until this sprint's permanent test account existed
 
-## 3. Upcoming Sprints
-
-**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0 and 7.1 are complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reuses a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section.
+**Post-sprint UX integration (2026-07-14):** the Navbar's account dropdown and mobile panel were wired up with My Account / Addresses / Orders / Wishlist links (previously only email + Sign out) — navigation-only, no logic changes.
 
 ### Sprint 7.2 — Cart & Session Continuity
-**Goal:** Cart merge on login (localStorage → server) and related session-continuity concerns.
+**Status:** ✅ Complete
 
-**Schema decision made (2026-07-14, see ADR-021):** `carts` + `cart_items` — normalized tables mirroring `orders`/`order_items`, server-persisted for authenticated users only (guests remain client-only, merged in on login), no price/name snapshot (cart reflects live product data), `cart_items.source` prepared for future `'ai'`/`'partner'` attribution alongside today's `'web'`. Migration `20260714000001_cart_schema.sql` is applied to the linked project. Full detail in `docs/DATABASE.md` §8 and ADR-021.
+**Phase 1 — schema (2026-07-14, ADR-021):** `carts` + `cart_items` — normalized tables mirroring `orders`/`order_items`, server-persisted for authenticated users only (guests remain client-only), no price/name snapshot (cart reflects live product data), `cart_items.source` prepared for future `'ai'`/`'partner'` attribution alongside today's `'web'`. Migration `20260714000001_cart_schema.sql` applied to the linked project.
 
-**Remaining, not yet scoped or implemented:** the merge-on-login flow itself, cart Server Actions (add/update/remove), and any Zustand/UI changes to read from the server cart for authenticated users. These need their own implementation plan before coding starts, same as every other sprint.
+**Phase 2 — application layer (2026-07-14):** guest carts now merge into the server on login and stay continuously synced for authenticated users, with zero changes to `CartDrawer` or the `/cart` page.
+
+- `src/lib/supabase/queries/products.ts` — exported `mapRow`/`ProductRow`/`PRODUCT_FIELDS` so the cart query module reuses the exact same product-row mapping instead of duplicating it
+- `src/lib/supabase/queries/cart.ts` — `getOrCreateActiveCart()` (partial-unique-safe, retries on a create race), `getActiveCartItems()` (joins `cart_items` → `products`, maps to `CartItem[]`)
+- `src/app/cart/actions.ts` — `syncAddItem`/`syncUpdateQuantity`/`syncRemoveItem`/`syncClearCart` (all `auth.uid()`-scoped via `getUser()`, atomic single-row updates, no transaction — same posture as ADR-015/016/021), `mergeGuestCart()` (one-time local→server fold on first login), `fetchServerCart()` (plain hydrate for repeat loads)
+- `src/lib/store.ts` — internal-only changes: a `userId` field (excluded from the persisted `localStorage` blob via `partialize`, since a stale value could make a fresh browser think it's still signed in as whoever used it last) and a `setUserId()` that merges once per account per device (guarded by a `homenest-cart-merged-user` `localStorage` flag), hydrates on repeat loads instead of re-merging, and clears the cart on sign-out so a shared device never leaks one account's cart to the next. `addItem`/`removeItem`/`updateQuantity`/`clearCart` each also fire the matching Server Action when authenticated — the public API is unchanged, so every existing caller needed no edits
+- `src/components/layout/Navbar.tsx` — three lines added to the *existing* auth-state effect to call `setUserId`; no new effect
+- Verified live: guest add-to-cart unaffected, merge-on-login confirmed, repeat-load hydration confirmed non-duplicating, full `localStorage` wipe-and-restore from the server confirmed (proves true server persistence, not just an optimistic cache), `clearCart` sync confirmed, sign-out cleanup confirmed
+
+## 3. Upcoming Sprints
+
+**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0, 7.1, and 7.2 are all complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reused a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section.
 
 ### Sprint 8 — Payments & Orders
 **Goal:** End-to-end checkout with Stripe

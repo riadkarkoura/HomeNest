@@ -562,13 +562,20 @@ export default function Navbar() {
   const menuTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Session state — live via onAuthStateChange, not just a one-time read ──
+  // Also drives the cart store's server sync (Sprint 7.2 Phase 2) — same
+  // session transitions this effect already tracks, just also handed to
+  // useCartStore so merge/hydrate/reset happens without a second listener.
   useEffect(() => {
     const supabase = createClient();
 
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      useCartStore.getState().setUserId(data.user?.id ?? null);
+    });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      useCartStore.getState().setUserId(session?.user?.id ?? null);
     });
 
     return () => subscription.subscription.unsubscribe();

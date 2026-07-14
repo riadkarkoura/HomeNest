@@ -15,7 +15,10 @@ function client() {
   );
 }
 
-const SELECT = [
+// Exported so other query modules (e.g. cart.ts) that join through a
+// different table can reuse the exact same product field list rather than
+// hand-copying it and risking drift.
+export const PRODUCT_FIELDS = [
   "id", "slug", "name", "description", "long_description",
   "price", "original_price", "rating", "review_count",
   "in_stock", "featured", "tags", "material", "dimensions",
@@ -24,7 +27,9 @@ const SELECT = [
   "product_images ( cdn_url, sort_order, is_primary )",
 ].join(", ");
 
-type ProductRow = {
+const SELECT = PRODUCT_FIELDS;
+
+export type ProductRow = {
   id: string;
   slug: string;
   name: string;
@@ -45,7 +50,7 @@ type ProductRow = {
   product_images: Array<{ cdn_url: string; sort_order: number; is_primary: boolean }>;
 };
 
-function mapRow(row: ProductRow): Product {
+export function mapRow(row: ProductRow): Product {
   const images = [...(row.product_images ?? [])]
     .sort((a, b) => {
       if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
