@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ShoppingCart, Menu, X, Search, User, LogOut,
+  ShoppingCart, Menu, X, Search, User, LogOut, MapPin, Package, Heart,
   ChevronDown, ArrowUpRight, ChevronRight,
 } from "lucide-react";
 import {
@@ -465,6 +465,47 @@ function MobilePanel({
           </motion.div>
         ))}
 
+        {user && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Link
+              href="/account"
+              onClick={onClose}
+              className="flex items-center gap-3 py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950 transition-colors"
+            >
+              <User className="h-4 w-4 text-stone-400" />
+              My Account
+            </Link>
+            <Link
+              href="/account/addresses"
+              onClick={onClose}
+              className="flex items-center gap-3 py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950 transition-colors"
+            >
+              <MapPin className="h-4 w-4 text-stone-400" />
+              Addresses
+            </Link>
+            <Link
+              href="/account/orders"
+              onClick={onClose}
+              className="flex items-center gap-3 py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950 transition-colors"
+            >
+              <Package className="h-4 w-4 text-stone-400" />
+              Orders
+            </Link>
+            <Link
+              href="/account/wishlist"
+              onClick={onClose}
+              className="flex items-center gap-3 py-4 border-b border-stone-100 text-base font-light text-stone-800 hover:text-stone-950 transition-colors"
+            >
+              <Heart className="h-4 w-4 text-stone-400" />
+              Wishlist
+            </Link>
+          </motion.div>
+        )}
+
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -746,6 +787,23 @@ export default function Navbar() {
                     <DropdownMenuLabel className="truncate font-normal text-stone-500">
                       {user.email}
                     </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem render={<Link href="/account" />} className="gap-2 text-stone-700">
+                      <User className="h-4 w-4" />
+                      My Account
+                    </DropdownMenuItem>
+                    <DropdownMenuItem render={<Link href="/account/addresses" />} className="gap-2 text-stone-700">
+                      <MapPin className="h-4 w-4" />
+                      Addresses
+                    </DropdownMenuItem>
+                    <DropdownMenuItem render={<Link href="/account/orders" />} className="gap-2 text-stone-700">
+                      <Package className="h-4 w-4" />
+                      Orders
+                    </DropdownMenuItem>
+                    <DropdownMenuItem render={<Link href="/account/wishlist" />} className="gap-2 text-stone-700">
+                      <Heart className="h-4 w-4" />
+                      Wishlist
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut} className="gap-2 text-stone-700">
                       <LogOut className="h-4 w-4" />
