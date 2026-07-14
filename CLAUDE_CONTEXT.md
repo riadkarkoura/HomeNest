@@ -28,12 +28,22 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 7.1 — User Area.  
-**Date of last update:** 2026-07-13
+**Last sprint completed:** Sprint 7.1 — User Area. Sprint 7.2's schema phase is also done (see below).  
+**Date of last update:** 2026-07-14
 
 ---
 
 ## Current Sprint
+
+**Sprint 7.2 — Cart & Session Continuity** — schema phase ✅ COMPLETE, application layer not yet scoped
+
+`carts` + `cart_items` tables were designed and migrated (2026-07-14, ADR-021) per explicit user architecture review + refinements: normalized, structurally parallel to `orders`/`order_items`; server-persisted for **authenticated users only** (guests stay on the existing client-only Zustand + `localStorage` cart, merged in on login — that merge flow is separate, not-yet-built work); no price/name snapshot on `cart_items` (a cart reflects live product data, unlike the immutable `order_items` snapshot); `cart_items.source` (`text NOT NULL DEFAULT 'web'`, unconstrained) prepared for future `'ai'`/`'partner'` attribution without needing a migration to introduce them. Migration `20260714000001_cart_schema.sql` is applied to the linked Supabase project (verified via `supabase migration list` and a REST smoke test). RLS matches the existing `auth.uid()`-owned-row pattern (`addresses`/`wishlists`) — no service-role key. Full detail in `docs/DATABASE.md` §8 and ADR-021.
+
+**Explicitly not done yet:** the merge-on-login flow, cart Server Actions (add/update/remove/set-quantity), and any Zustand/UI changes to read from the server cart. `src/lib/store.ts` (today's client-only cart) is completely untouched. This application-level work needs its own implementation plan and approval before coding starts, same as every other sprint.
+
+---
+
+## Previous Sprint
 
 **Sprint 7.1 — User Area** ✅ COMPLETE
 
@@ -60,6 +70,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint 6.1 (remaining) | **Delete (soft), Archive/Restore, Duplicate** — `src/app/admin/products/actions.ts` (new), all reusing existing RLS (`products_staff_update`/`products_staff_insert`), no new migration needed for these three. **Image upload to Supabase Storage** — `src/app/admin/products/media-actions.ts` (upload) + `src/components/admin/products/studio/images.ts` (`syncProductImages`, called from Create/Edit), migration `20260712000003` (new `products` bucket + `storage.objects`/`media`/`product_images` staff policies). **Real Product Quality scoring** — `src/components/admin/products/studio/scoring.ts`, deterministic (not AI). See ADR-018. |
 | Sprint 7.0 | **Authentication Foundation** — customer email/password registration + login (`src/app/login/actions.ts`, wired to the existing `/login` page's register/login toggle), Google OAuth (`supabase.auth.signInWithOAuth`) + shared `/auth/callback` Route Handler (code-exchange, reused by password recovery via a `next` query param), password reset (`/forgot-password` + `/auth/reset-password`), customer session helpers `verifySession`/`getUser` added to `src/lib/auth/dal.ts`, session-aware Navbar (account dropdown + sign out, live via `supabase.auth.onAuthStateChange`), `src/proxy.ts` extended to gate `/checkout` and `/account/*`. No new RLS/migrations needed — `profiles`/`addresses` policies already existed. See ADR-020. |
 | Sprint 7.1 | **User Area** — future-ready customer account hub. `src/components/account/nav-items.ts` (typed, grouped nav config, `active`/`comingSoon` status — single source of truth for both the pill nav and the "coming soon" teaser), `AccountShell.tsx`/`ComingSoonGrid.tsx` (storefront-styled, no admin chrome), `src/app/account/layout.tsx` (`verifySession()` gate), Profile (`page.tsx`/`ProfileForm.tsx`/`actions.ts` — `updateProfile`), Addresses (`addresses/{page.tsx,actions.ts}` + `AddressesView`/`AddressCard`/`AddressForm` — full CRUD via a `Sheet`, set-default unsets the prior default first, no transaction, same posture as ADR-015/016), Orders/Wishlist UI-only placeholders, `src/lib/supabase/queries/account.ts` (`getProfile` wrapped in `React.cache`, `getAddresses`). No new RLS/migrations needed. Also fixed a Sprint 7.0 bug found during this sprint's verification: Base UI's `DropdownMenuLabel` needs a `<DropdownMenuGroup>` wrapper. |
+| Sprint 7.2 (schema only) | **Cart architecture** — `carts` + `cart_items` tables, normalized, structurally parallel to `orders`/`order_items`, server-persisted for authenticated users only (guests stay client-only). No price/name snapshot on `cart_items` — reflects live product data. `cart_items.source` prepared for future `'ai'`/`'partner'` attribution (unconstrained text, not a `CHECK` enum, so no migration needed to introduce a new source later). Migration `20260714000001_cart_schema.sql`, applied to the linked project. RLS matches the `addresses`/`wishlists` `auth.uid()`-owned-row pattern. See ADR-021. **Application layer (merge-on-login, cart Server Actions, Zustand/UI changes) is separate, unscoped work — not part of this.** |
 
 ---
 
@@ -67,11 +78,11 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 
 | Sprint | Goal |
 |---|---|
-| Sprint 7.2 | Cart & Session Continuity — scope to be defined later; expected to cover cart merge on login. No `cart`/`cart_items` table exists yet, so this likely needs a schema decision first. |
+| Sprint 7.2 (application layer) | Cart & Session Continuity — merge-on-login flow, cart Server Actions, Zustand/UI changes to read from the server cart for authenticated users. Schema is already done (see above, ADR-021) — this is the remaining, not-yet-scoped work. |
 | Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) — will wire real data into the existing `/account/orders` placeholder |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
 
-**Do NOT implement** Sprint 7.2, Stripe, or AI search until the relevant sprint begins.
+**Do NOT implement** Sprint 7.2's application layer, Stripe, or AI search until the relevant sprint begins.
 
 ---
 
@@ -216,7 +227,7 @@ src/
 
 **Supabase project:** Connected. Env vars in `.env.local` — only `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`. No service-role key, by design (ADR-013).
 
-**Tables:** 34 tables defined in `docs/DATABASE.md`. 7 migrations applied (`supabase/migrations/`); most of the 34 have schema but no write policies yet — see the RLS coverage gap noted in the architecture review.
+**Tables:** 36 tables defined in `docs/DATABASE.md` (added `carts`/`cart_items`, migration 008, ADR-021). 8 migrations applied (`supabase/migrations/`); most tables have schema but no write policies yet — see the RLS coverage gap noted in the architecture review. `carts`/`cart_items` are a full exception — schema, RLS, and indexes all shipped together in migration 008, own-row `auth.uid()` policies already live.
 
 **Storage:** `products` bucket (public, 10MiB limit, image/webp+jpeg+png+avif only) — created by migration 007, matches `supabase/config.toml`'s declared bucket.
 
@@ -225,7 +236,7 @@ src/
 - `products` — 8 seed rows + whatever's been created since via `/admin/products/new`
 - `product_images` — 2 images per seed product (Unsplash URLs, `media_id = NULL` — these legacy rows are preserved through edits, see ADR-018) + whatever's been uploaded since via the Studio's Media section
 
-**RLS:** Default-deny on every table. `products`/`categories`/most catalogue tables: public SELECT (active only) + full staff/admin SELECT. `products`/`seo_metadata`: staff/admin INSERT (migration 005) and UPDATE (migration 006) too. `products` also has a narrow staff/admin DELETE, scoped to Create's compensating rollback, not general use — the admin Delete action reuses the UPDATE policy for a soft delete instead (ADR-018). `media`/`product_images`: staff/admin INSERT (migration 007); `product_images` also has staff/admin UPDATE/DELETE. `storage.objects` on the `products` bucket: staff/admin INSERT/DELETE (migration 007). Almost everything else (including `orders`/`order_items`) has no write policy at all yet.
+**RLS:** Default-deny on every table. `products`/`categories`/most catalogue tables: public SELECT (active only) + full staff/admin SELECT. `products`/`seo_metadata`: staff/admin INSERT (migration 005) and UPDATE (migration 006) too. `products` also has a narrow staff/admin DELETE, scoped to Create's compensating rollback, not general use — the admin Delete action reuses the UPDATE policy for a soft delete instead (ADR-018). `media`/`product_images`: staff/admin INSERT (migration 007); `product_images` also has staff/admin UPDATE/DELETE. `storage.objects` on the `products` bucket: staff/admin INSERT/DELETE (migration 007). `carts`/`cart_items`: full own-row ALL for authenticated (`auth.uid() = user_id`, `cart_items` scoped via its owning cart), staff SELECT, no anonymous access (migration 008). Almost everything else (including `orders`/`order_items`) has no write policy at all yet.
 
 **Supabase client pattern — three clients, pick by call site:**
 
@@ -255,14 +266,14 @@ src/
 
 ## Next Priority
 
-**Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both complete.** Customer register/login (email+password and Google OAuth), password reset, session-aware Navbar, and the `/account` hub (Profile, Addresses, Orders/Wishlist placeholders) are all real and verified live. What's left, in rough priority order:
+**Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both complete.** Customer register/login (email+password and Google OAuth), password reset, session-aware Navbar, and the `/account` hub (Profile, Addresses, Orders/Wishlist placeholders) are all real and verified live. Sprint 7.2's schema (`carts`/`cart_items`, ADR-021) is also done and applied. What's left, in rough priority order:
 
 - A dedicated Media Library so a previously-uploaded image can be reused across products, rather than uploaded fresh each time (not yet scheduled to a sprint)
-- **Sprint 7.2 — Cart & Session Continuity**: scope to be defined later; expected to cover cart merge on login, pending a schema decision (no `cart`/`cart_items` table exists yet).
+- **Sprint 7.2 — Cart & Session Continuity, application layer**: merge-on-login flow, cart Server Actions, Zustand/UI changes to read from the server cart for authenticated users. Not yet scoped with an implementation plan.
 - **Sprint 8 — Payments & Orders**: will wire real data into the existing `/account/orders` placeholder.
 
-Do NOT start Sprint 7.2 work without explicit user instruction.
+Do NOT start Sprint 7.2's application-layer work without explicit user instruction.
 
 ---
 
-*Last updated: 2026-07-13*
+*Last updated: 2026-07-14*

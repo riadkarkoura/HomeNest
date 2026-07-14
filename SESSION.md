@@ -1,7 +1,8 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 7.1 — User Area — complete.
+Sprint 7.2 — Cart & Session Continuity — schema phase complete, application-level work not yet
+scoped or started. Sprint 7.1 (User Area) is complete.
 
 ## Last Completed
 - ✅ Product Create
@@ -38,8 +39,16 @@ Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both compl
 can register, sign in with email/password or Google, reset a forgotten password, see a
 session-aware Navbar, and manage their profile and addresses at `/account`. Orders and Wishlist
 are UI-only placeholders (no `orders`/`wishlist_items` data wired up — that's Sprint 8 and a
-future sprint respectively). Cart merge remains postponed to Sprint 7.2, pending a schema
-decision (no `cart`/`cart_items` table exists yet).
+future sprint respectively).
+
+**Sprint 7.2's schema decision is made and applied (2026-07-14, ADR-021):** `carts` + `cart_items`
+tables exist on the linked Supabase project (migration `20260714000001_cart_schema.sql`),
+normalized and structurally parallel to `orders`/`order_items`, server-persisted for
+authenticated users only, no price/name snapshot (cart reflects live product data),
+`cart_items.source` prepared for future `'ai'`/`'partner'` attribution. **Application-level work
+is not yet built**: no merge-on-login flow, no cart Server Actions, no Zustand/UI changes. The
+existing client-only Zustand + `localStorage` cart (`src/lib/store.ts`) is completely unchanged
+and still what the storefront actually uses today.
 
 ## Sprint 7.0 Verification (2026-07-13)
 
@@ -132,9 +141,10 @@ session hits the same thing and wastes time suspecting a real bug first.
 main
 
 ## Next Task
-Sprint 7.2 — Cart & Session Continuity (scope to be defined later; cart merge on login is
-postponed here, pending a schema decision — no `cart`/`cart_items` table exists yet). Do NOT
-start without explicit user instruction — see docs/ROADMAP.md.
+Sprint 7.2 — Cart & Session Continuity, application layer. Schema is done (`carts`/`cart_items`,
+ADR-021). Remaining: merge-on-login flow, cart Server Actions (add/update/remove), Zustand/UI
+changes to read from the server cart for authenticated users. Needs its own implementation plan
+before coding — do NOT start without explicit user instruction — see docs/ROADMAP.md.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)

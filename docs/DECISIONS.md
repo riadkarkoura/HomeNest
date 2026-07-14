@@ -329,5 +329,29 @@ The number **7.1 is deliberately reused**: it already names the shipped Product 
 
 ---
 
+## ADR-021 — Sprint 7.2 cart architecture: normalized `carts`/`cart_items`, authenticated-only server persistence, per-item source tracking
+**Date:** 2026-07-14
+**Status:** Accepted
+
+**Decision:** Add `carts` and `cart_items` tables, structurally parallel to `orders`/`order_items`, rather than a single JSONB blob or staying client-only. Server persistence covers **authenticated users only** — guests continue to use the existing client-side cart (Zustand + `localStorage`) unchanged, merged into the user's `carts` row on login (merge logic itself is separate, not-yet-scoped implementation work — this ADR covers schema only). `cart_items` holds no price/name snapshot — a cart reflects live product data; snapshotting happens only once at order conversion, same as it already does for `order_items`. `cart_items.source` (`text NOT NULL DEFAULT 'web'`, unconstrained rather than a `CHECK` enum) records what added each line item, following the same documented-values-not-CHECK-constraint convention already used by `product_events.source` — so a future value (`'ai'`, `'partner'`) never requires a migration to introduce. RLS follows the existing `auth.uid()`-owned-row pattern used by `addresses`/`wishlists`; no service-role key, consistent with ADR-013.
+
+**Reason:** Solves Sprint 7.2's actual named problem (session continuity for identified users) without inventing a second, cookie-based authorization pattern this schema doesn't otherwise have anywhere (every owned-row table here uses `auth.uid()`), and without violating this project's own stated principle against serializing relational data as JSONB (`docs/DATABASE.md` §1: *"Never serialize arrays of objects as text"*). Structural parallelism with `order_items` means checkout (Sprint 8) is a direct field mapping, not a data-shape translation.
+
+**Future compatibility this design was explicitly built to support:**
+
+- **Marketplace (Phase 4):** `cart_items.product_id` already FKs to `products`. Once `products` gains a vendor/seller relationship, splitting a cart's contents by vendor for multi-vendor checkout is a plain `cart_items JOIN products GROUP BY vendor_id` — no cart schema change needed. The complexity of "one order per vendor from one cart" lives entirely on the Orders side at that time, not here. `cart_items.source = 'partner'` also gives marketplace/reseller integrations a way to distinguish items a partner's system added from organic customer adds, which matters for commission/revenue attribution once that model exists.
+- **AI:** `cart_items.source = 'ai'` lets a future shopping-assistant or recommendation agent (per `PROJECT_VISION.md`'s long-term "AI-native commerce operating system" direction) add items to a customer's cart on their behalf while remaining fully auditable and visually distinguishable from a manual add — this matters for user trust (a customer should be able to tell "the AI added this, not me") and for measuring AI-driven conversion separately from organic conversion. Because `carts`/`cart_items` are normal queryable rows rather than an opaque JSONB blob, abandoned-cart detection (`status='active' AND updated_at < now() - interval '1 day'`), demand-signal queries ("how many active carts currently contain product X"), and cart-recovery content generation are all plain SQL an agent can run directly — the same reasoning ADR-013's RLS-first posture already applies to every other write path in this app.
+- **Payments (Sprint 8):** no schema coupling — a PaymentIntent amount is computed from live `cart_items × product price` at checkout initiation; payments consume the cart's current state, they don't need to understand its internal shape.
+- **Partner Companies:** normalized tables with real FKs and RLS extend naturally to a new authenticated caller (e.g., a partner integration adding items via API on a customer's behalf) — every constraint the database already enforces for a normal cart add continues to apply. A JSONB blob would have pushed that integrity checking into every integration's application code individually instead of the database once.
+
+**Consequence:** One migration (`20260714000001_cart_schema.sql`) adds the schema, indexes, RLS, and reuses the existing `set_updated_at()` trigger function. Sprint 7.2's application-level work (merge-on-login flow, cart Server Actions, Zustand integration, UI) is explicitly **not** covered by this ADR and remains unscoped pending its own implementation plan. Sprint 8 may want an optional `orders.cart_id` FK for direct conversion-funnel analytics — not required now, flagged for later, not built ahead of need.
+
+**Alternatives considered:**
+- Single JSONB blob (rejected — contradicts `docs/DATABASE.md` §1's own principle; weaker for exactly the Marketplace/AI query patterns this ADR was asked to support).
+- Guest server-side carts via a session-cookie token (rejected — solves a problem that isn't coherent for anonymous users, who aren't identified across devices regardless, and would introduce a second RLS mechanism alongside the `auth.uid()` one used everywhere else in this schema).
+- A `CHECK` enum on `cart_items.source` (rejected — would require a migration every time a new source type is introduced, defeating the purpose of preparing for sources not yet built; the unconstrained-text-with-documented-values convention already exists in this schema via `product_events.source`).
+
+---
+
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-13*
+*Last updated: 2026-07-14*

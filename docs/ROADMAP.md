@@ -21,7 +21,7 @@
 
 **Version:** 0.1.0  
 **Status:** Phase 0 — Frontend Foundation complete; Phase 1 (Backend) in progress  
-**Date:** 2026-07-13
+**Date:** 2026-07-14
 
 ### What's live
 
@@ -44,7 +44,7 @@
 
 ### What's not yet live
 
-- Cart merge on login (localStorage → server) — Sprint 7.2, pending a schema decision (no `cart`/`cart_items` table exists yet)
+- Cart merge on login (localStorage → server) — Sprint 7.2; schema (`carts`/`cart_items`) is designed and migrated (ADR-021), the merge flow itself is not yet built
 - Payments (Stripe, PayPal)
 - Orders system (real order data — today's `/account/orders` is a UI-only placeholder)
 - Wishlist data (real save-for-later — today's `/account/wishlist` is a UI-only placeholder)
@@ -232,9 +232,11 @@ Customer-facing account UI behind Sprint 7.0's protection. (Not to be confused w
 **Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0 and 7.1 are complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reuses a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section.
 
 ### Sprint 7.2 — Cart & Session Continuity
-**Goal:** Scope to be defined later. Expected to cover cart merge on login (localStorage → server) and related session-continuity concerns.
+**Goal:** Cart merge on login (localStorage → server) and related session-continuity concerns.
 
-**Note:** No `cart`/`cart_items` table exists yet in `docs/DATABASE.md` — this sprint likely needs its own schema decision before implementation, not just application code.
+**Schema decision made (2026-07-14, see ADR-021):** `carts` + `cart_items` — normalized tables mirroring `orders`/`order_items`, server-persisted for authenticated users only (guests remain client-only, merged in on login), no price/name snapshot (cart reflects live product data), `cart_items.source` prepared for future `'ai'`/`'partner'` attribution alongside today's `'web'`. Migration `20260714000001_cart_schema.sql` is applied to the linked project. Full detail in `docs/DATABASE.md` §8 and ADR-021.
+
+**Remaining, not yet scoped or implemented:** the merge-on-login flow itself, cart Server Actions (add/update/remove), and any Zustand/UI changes to read from the server cart for authenticated users. These need their own implementation plan before coding starts, same as every other sprint.
 
 ### Sprint 8 — Payments & Orders
 **Goal:** End-to-end checkout with Stripe
@@ -291,5 +293,5 @@ HomeNest's mission is to become one of the best Smart Home Solutions ecommerce e
 
 ---
 
-*Last updated: 2026-07-13*  
+*Last updated: 2026-07-14*  
 *Maintained by: Lead Product Engineer*
