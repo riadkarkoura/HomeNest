@@ -309,6 +309,7 @@ The central table. All other catalogue tables reference it.
 |---|---|---|---|
 | `id` | `uuid` | PK DEFAULT `gen_random_uuid()` | |
 | `slug` | `text` | UNIQUE NOT NULL | URL slug ("silicone-sink-splash-guard") |
+| `sku` | `text` | UNIQUE | Base-catalogue SKU, independent of `slug` — a rename never regenerates it. Added in migration `20260715000001` (Sprint 8.0, ADR-022), backfilled once from slug. `product_variants.sku` takes precedence when a variant is selected. |
 | `name` | `text` | NOT NULL | |
 | `tagline` | `text` | | Short value proposition (subtitle on product page) |
 | `description` | `text` | | One-sentence summary for cards |
@@ -601,6 +602,7 @@ The active shopping cart for an authenticated user. Guests do not get a server-s
 | `id` | `uuid` | PK DEFAULT `gen_random_uuid()` | |
 | `user_id` | `uuid` | FK → `profiles(id)` ON DELETE CASCADE NOT NULL | |
 | `status` | `text` | NOT NULL DEFAULT `'active'` CHECK IN `('active','converted','abandoned')` | `converted` when checkout succeeds; the row (and its `cart_items`) is kept, not deleted, for conversion-funnel analytics |
+| `converted_order_id` | `uuid` | FK → `orders(id)` ON DELETE SET NULL | The order this cart produced, when `status = 'converted'`. Added in migration `20260715000001` (Sprint 8.0, ADR-022) — closes the traceability gap ADR-021 flagged. |
 | `currency` | `text` | NOT NULL DEFAULT `'USD'` | matches `products.currency` convention |
 | `created_at` | `timestamptz` | NOT NULL DEFAULT `now()` | |
 | `updated_at` | `timestamptz` | NOT NULL DEFAULT `now()` | bumped whenever `cart_items` change (trigger); powers abandoned-cart queries |
@@ -669,6 +671,7 @@ The order lifecycle record. Contains a complete snapshot of the shipping address
 | `shipping_address_id` | `uuid` | FK → `addresses(id)` ON DELETE SET NULL | Live FK (may change) |
 | `shipping_address_snapshot` | `jsonb` | NOT NULL | Immutable address at time of order |
 | `billing_address_snapshot` | `jsonb` | | |
+| `shipping_method` | `text` | | Delivery option chosen at checkout (e.g. "standard", "express") — matches an entry in `src/lib/checkout/shipping-options.ts`, not a DB table. Added in migration `20260715000001` (Sprint 8.0, ADR-022). |
 | `customer_notes` | `text` | | Notes from customer at checkout |
 | `admin_notes` | `text` | | Internal notes — not visible to customer |
 | `tracking_number` | `text` | | Courier tracking number |
@@ -1404,8 +1407,8 @@ Admin              → full access (uses service_role key server-side)
 | `carts` | NONE | ALL own rows | SELECT | ALL |
 | `cart_items` | NONE | ALL via own cart | SELECT via own cart | ALL |
 | `notifications` | NONE | SELECT/UPDATE own rows | NONE | ALL |
-| `orders` | NONE | SELECT own orders | SELECT | ALL |
-| `order_items` | NONE | SELECT via own orders | SELECT | ALL |
+| `orders` | NONE | SELECT own orders + INSERT⁴ own orders | SELECT | ALL |
+| `order_items` | NONE | SELECT via own orders + INSERT⁴ via own orders | SELECT | ALL |
 | `reviews` | SELECT (published only) | SELECT + INSERT own | SELECT | ALL |
 | `review_votes` | NONE | ALL own votes | NONE | ALL |
 | `wishlists` | SELECT (public only) | ALL own rows | NONE | ALL |
@@ -1431,6 +1434,8 @@ Admin              → full access (uses service_role key server-side)
 ² Added in migration 006 (Sprint 7.1), for the Product Edit Server Action (`updateProduct`) — see ADR-016. Same pattern, same posture: `WITH CHECK (public.get_my_role() IN ('staff', 'admin'))`, no service_role key.
 
 ³ Added in migration 007 (Sprint 6.1 remaining), for real image upload — see ADR-018. Same `get_my_role() IN ('staff', 'admin')` pattern. Migration 007 also adds matching `storage.objects` INSERT/DELETE policies scoped to `bucket_id = 'products'` (not a table in this list, but gates the same upload path) and creates the `products` Storage bucket itself (public, 10MiB limit, image/webp+jpeg+png+avif only), matching the bucket already declared in `supabase/config.toml`.
+
+⁴ Added in migration `20260715000001` (Sprint 8.0), for `createOrder()` — see ADR-022. `orders_own_insert`: `WITH CHECK (auth.uid() = user_id)`. `order_items_own_insert`: `WITH CHECK (EXISTS (SELECT 1 FROM orders WHERE id = order_items.order_id AND user_id = auth.uid()))`. Authenticated only — no `anon` policy; a guest may browse `/checkout` but `createOrder()` requires a session, so no order is ever inserted without one.
 
 ### Key Policies (Detail)
 
@@ -1805,5 +1810,5 @@ Tables must be created in dependency order to satisfy foreign key constraints:
 ---
 
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-14 — added `carts`/`cart_items` (Sprint 7.2, ADR-021)*
+*Last updated: 2026-07-15 — added `products.sku`, `orders.shipping_method`, `carts.converted_order_id`, and orders/order_items INSERT RLS (Sprint 8.0, ADR-022)*
 *Next review: before writing the first Supabase migration*

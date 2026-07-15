@@ -30,8 +30,11 @@ interface CartStore {
   // transition. Handles merge-on-first-login, hydrate-on-return, and
   // reset-on-sign-out internally, so callers of every method above (
   // CartDrawer, the /cart page) stay completely unaware a server sync
-  // exists -- their code is unchanged.
-  setUserId: (id: string | null) => void;
+  // exists -- their code is unchanged. Returns a promise so a caller that
+  // needs the merge/hydrate to finish first (e.g. checkout, Sprint 8.0)
+  // can await it; Navbar's existing call site ignores the return value,
+  // so this is additive, not a behavior change for it.
+  setUserId: (id: string | null) => Promise<void>;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -103,7 +106,7 @@ export const useCartStore = create<CartStore>()(
           0
         ),
 
-      setUserId: (id) => {
+      setUserId: async (id) => {
         const prevId = get().userId;
         set({ userId: id });
 
@@ -114,23 +117,27 @@ export const useCartStore = create<CartStore>()(
           if (mergedFor === id) {
             // Already merged this device for this account -- hydrate from
             // the server (cross-device continuity) instead of re-merging.
-            fetchServerCart()
-              .then((items) => set({ items }))
-              .catch((err) => console.error("[cart sync] fetchServerCart failed", err));
+            try {
+              const items = await fetchServerCart();
+              set({ items });
+            } catch (err) {
+              console.error("[cart sync] fetchServerCart failed", err);
+            }
           } else {
             const localItems = get().items.map((i) => ({
               productId: i.product.id,
               variantId: null,
               quantity: i.quantity,
             }));
-            mergeGuestCart(localItems)
-              .then((items) => {
-                set({ items });
-                if (typeof window !== "undefined") {
-                  localStorage.setItem(MERGED_USER_KEY, id);
-                }
-              })
-              .catch((err) => console.error("[cart sync] mergeGuestCart failed", err));
+            try {
+              const items = await mergeGuestCart(localItems);
+              set({ items });
+              if (typeof window !== "undefined") {
+                localStorage.setItem(MERGED_USER_KEY, id);
+              }
+            } catch (err) {
+              console.error("[cart sync] mergeGuestCart failed", err);
+            }
           }
         } else if (!id && prevId) {
           // Signed out -- don't leak the previous account's cart to

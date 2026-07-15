@@ -1,8 +1,8 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 7.2 — Cart & Session Continuity — ✅ COMPLETE (schema + application layer). Sprint 7.1
-(User Area) is also complete.
+Sprint 8.0 — Checkout Architecture Review & Implementation — ✅ COMPLETE (Milestone 2: First
+Sale). Sprints 7.0, 7.1, and 7.2 are also complete.
 
 ## Last Completed
 - ✅ Product Create
@@ -43,14 +43,43 @@ Sprint 7.2 — Cart & Session Continuity — ✅ COMPLETE (schema + application 
   `setUserId` so the existing Zustand cart merges a guest's local cart into the server on first
   login, hydrates from the server on return visits/devices, and clears on sign-out — `CartDrawer.tsx`
   and `src/app/cart/page.tsx` needed zero changes
+- ✅ `products.sku`, `orders.shipping_method`, `carts.converted_order_id`, and the first-ever
+  `orders`/`order_items` INSERT RLS policies (migration `20260715000001_checkout_write_access.sql`,
+  ADR-022) — both tables existed since Sprint 2 with SELECT-only RLS
+- ✅ Two `SECURITY DEFINER` RPC functions (migration `20260715000002_stripe_payment_functions.sql`)
+  so Stripe's webhook can update `orders` with no service-role key and no end-user session — the
+  webhook's HMAC signature check is the real authorization boundary
+- ✅ Full checkout flow at `/checkout` — guest-accessible (ADR-022), inline sign-in/registration
+  gate before order creation, shipping/billing address (reuses `AddressForm`), static delivery
+  options, order review, `createOrder()` Server Action (re-fetches live prices/stock, builds
+  immutable `order_items.product_snapshot`, converts the cart)
+  — `src/app/checkout/{page.tsx,actions.ts}`, `src/components/checkout/*`
+- ✅ Provider-agnostic payment layer (`src/lib/payments/`) with Stripe as the only concrete
+  provider today, `/api/payments/stripe/intent`, `/api/webhooks/stripe`, `CheckoutPayment.tsx`
+  (renders Stripe's Payment Element when configured, gracefully degrades otherwise — order
+  creation and payment are decoupled, so an order always exists regardless)
+- ✅ Order confirmation page (`/order-confirmation/[orderNumber]`) and real order history/detail at
+  `/account/orders` and `/account/orders/[orderNumber]` (replacing the Sprint 7.1 placeholder),
+  sharing one `OrderSummary` component
 
 ## Current Status
 Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
 Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both complete: customers
 can register, sign in with email/password or Google, reset a forgotten password, see a
-session-aware Navbar, and manage their profile and addresses at `/account`. Orders and Wishlist
-are UI-only placeholders (no `orders`/`wishlist_items` data wired up — that's Sprint 8 and a
-future sprint respectively).
+session-aware Navbar, and manage their profile and addresses at `/account`. Orders now show real
+data (Sprint 8.0); Wishlist remains a UI-only placeholder (no `wishlist_items` data wired up —
+future sprint).
+
+**Sprint 8.0 is now fully complete (2026-07-15, ADR-022, Milestone 2: First Sale):** a customer —
+guest or signed-in — can add products to cart, reach `/checkout` without being forced to log in
+first, identify inline only when actually placing an order, choose a shipping/billing address and
+delivery option, and have a real `orders`/`order_items` row created with immutable snapshots that
+never depend on `products` again. Payment collection itself is wired end-to-end in code (Stripe
+PaymentIntent creation, webhook, RPC-based order updates with no service-role key) but not yet
+configured — `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are
+unset, so orders place successfully as `pending`/`unpaid` and the checkout page shows a graceful
+"Stripe is not configured yet" fallback rather than a real charge. This is an external
+configuration dependency, the same category as Sprint 7.0's Google OAuth — see `TESTING.md` §5.
 
 **Sprint 7.2 is now fully complete (2026-07-14, ADR-021):** `carts` + `cart_items` tables exist on
 the linked Supabase project (migration `20260714000001_cart_schema.sql`), normalized and
@@ -173,13 +202,50 @@ Verified live against the linked Supabase project using the same permanent test 
   (image `src` warnings seen earlier in the session, plus a Base UI `SheetClose` warning inside
   `CartDrawer.tsx`, which Phase 2 never touched) — no fix applied, per "no unnecessary refactoring."
 
+## Sprint 8.0 Verification (2026-07-15)
+
+Verified live against the linked Supabase project using the same permanent test account (per
+`TESTING.md` §1; credentials not stored anywhere):
+
+- **RLS smoke test — PASS.** Anonymous REST insert into `orders` returned `401` (no `anon` INSERT
+  policy exists, matching the authenticated-only design), confirming the new `orders_own_insert`/
+  `order_items_own_insert` policies don't accidentally open a wider hole.
+- **`products.sku` backfill — PASS.** Verified via anon-key REST read that all 8 products received
+  a deterministic `HN-<SLUG>` SKU.
+- **Guest reaches `/checkout` — PASS.** Signed out, confirmed `/checkout` returns `200` and renders
+  the cart summary + inline identify step, not a redirect to `/login`.
+- **Inline identify → cart merge — PASS.** Signed in on the checkout page itself; confirmed the
+  page re-rendered with the full shipping/billing/delivery/review flow (via `router.refresh()`,
+  no full navigation) and the account's server-side cart items appeared merged alongside the
+  guest's local items.
+- **Order placement — PASS.** Selected a saved shipping address, placed the order twice (once with
+  3 merged items, once with 1 fresh item) — both created real `orders`/`order_items` rows with
+  correct SKUs, names, images, quantities, and totals; the active cart converted and cleared
+  locally each time.
+- **Order confirmation and history — PASS.** `/order-confirmation/[orderNumber]`,
+  `/account/orders`, and `/account/orders/[orderNumber]` all rendered the same real order data
+  correctly.
+- **Payment step graceful degradation — PASS.** With no Stripe keys configured,
+  `CheckoutPayment.tsx` correctly showed "Stripe is not configured yet (STRIPE_SECRET_KEY
+  missing). Your order has been saved and is pending payment." with a working "View Order" link —
+  no crash, no dead end.
+- **Protected routes unregressed — PASS.** `/account/orders` still returns `200` only for an
+  authenticated session; the `/checkout` proxy change is scoped to that one path.
+- **Production build — PASS**, run twice (once before adding the payment step, once after).
+- **Tooling note:** this session's browser automation tool failed to register clicks on
+  visually-hidden (`sr-only`) radio inputs and on a `useActionState` form's submit button, even
+  though the underlying React state updates were correct — confirmed by dispatching the same
+  interaction via `element.click()` / `form.requestSubmit()` through `preview_eval`, which worked
+  every time. Documented in `TESTING.md` §7 as an automation-tool limitation, not an app bug.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 7.2 is complete (schema + application layer). Awaiting the user's next sprint direction —
-see `docs/ROADMAP.md`'s "Upcoming Sprints" for candidates. Do NOT start new work without explicit
-user instruction.
+Sprint 8.0 is complete. The next candidate is Sprint 8.1 — Payment Activation & Order
+Notifications (configure Stripe keys, verify a real charge, order confirmation email, tax
+calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT start new
+work without explicit user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)

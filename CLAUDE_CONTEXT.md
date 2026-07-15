@@ -28,12 +28,28 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 7.2 — Cart & Session Continuity (schema + application layer, both phases complete).  
-**Date of last update:** 2026-07-14
+**Last sprint completed:** Sprint 8.0 — Checkout Architecture Review & Implementation (Milestone 2: First Sale).  
+**Date of last update:** 2026-07-15
 
 ---
 
 ## Current Sprint
+
+**Sprint 8.0 — Checkout Architecture Review & Implementation** ✅ COMPLETE (Milestone 2: First Sale)
+
+An architecture review was produced first (no code), approved with refinements, then implemented. `orders`/`order_items` existed since the initial schema (migration `20260711000002`) with SELECT-only RLS — Sprint 8.0's core job was giving them their first-ever write path, not designing new tables. Migration `20260715000001_checkout_write_access.sql` adds `products.sku` (nullable `UNIQUE`, backfilled once from slug, never regenerated on rename), `orders.shipping_method`, `carts.converted_order_id` (closes a gap ADR-021 flagged), and `orders_own_insert`/`order_items_own_insert` (`auth.uid()`-owned-row, no service-role key — ADR-013 upheld). A second migration (`20260715000002_stripe_payment_functions.sql`) adds two `SECURITY DEFINER` RPC functions so Stripe's webhook — the one part of checkout with no end-user session — can update `orders` without a service-role key; the webhook's HMAC signature check is the real authorization boundary.
+
+**Guest-can-browse, must-identify-to-order** (the user's explicit resolution to a tension the architecture review raised): `src/proxy.ts`'s `/checkout` gate was relaxed so guests reach the full flow, but `createOrder()` still requires a session — identification happens inline on the checkout page (`CheckoutIdentify.tsx`, new non-redirecting `checkoutSignIn`/`checkoutSignUp` actions), not via a `next=`-redirect-back to `/login` (that pattern already broke click interactivity once in Sprint 7.0).
+
+**Checkout UI and order creation:** `src/app/checkout/{page.tsx,actions.ts}` + `src/components/checkout/*` — shipping/billing address (reuses Sprint 7.1's `AddressForm`), static delivery options (`src/lib/checkout/shipping-options.ts`, deliberately not a DB table), order review, `createOrder()` (re-fetches live prices/stock, never trusts client totals, builds an immutable `order_items.product_snapshot` with name/SKU/image/variant so an order never depends on `products` again, converts the cart via `converted_order_id`).
+
+**Payment:** `src/lib/payments/` exposes one provider-agnostic `createPaymentIntent()` boundary with Stripe as the only concrete implementation — PayPal/Klarna/Apple Pay/Google Pay can be added behind the same boundary later without touching checkout code. `/api/payments/stripe/intent`, `/api/webhooks/stripe`, and `CheckoutPayment.tsx` are fully coded; `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are not yet configured (external dependency, `TESTING.md` §5), so orders place successfully as `pending`/`unpaid` and the UI shows a graceful fallback rather than collecting a real charge — order creation and payment are deliberately decoupled (matches the flow already documented in `docs/ARCHITECTURE.md` §12.1).
+
+Order confirmation (`/order-confirmation/[orderNumber]`) and real order history (`/account/orders`, `/account/orders/[orderNumber]`, replacing the Sprint 7.1 placeholder) share one `OrderSummary` component. See ADR-022 for full reasoning, alternatives considered, and what's explicitly out of scope (admin order management, tax calculation, coupon redemption UI).
+
+---
+
+## Previous Sprint (Cart & Session Continuity)
 
 **Sprint 7.2 — Cart & Session Continuity** ✅ COMPLETE (schema + application layer)
 
@@ -71,6 +87,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint 7.0 | **Authentication Foundation** — customer email/password registration + login (`src/app/login/actions.ts`, wired to the existing `/login` page's register/login toggle), Google OAuth (`supabase.auth.signInWithOAuth`) + shared `/auth/callback` Route Handler (code-exchange, reused by password recovery via a `next` query param), password reset (`/forgot-password` + `/auth/reset-password`), customer session helpers `verifySession`/`getUser` added to `src/lib/auth/dal.ts`, session-aware Navbar (account dropdown + sign out, live via `supabase.auth.onAuthStateChange`), `src/proxy.ts` extended to gate `/checkout` and `/account/*`. No new RLS/migrations needed — `profiles`/`addresses` policies already existed. See ADR-020. |
 | Sprint 7.1 | **User Area** — future-ready customer account hub. `src/components/account/nav-items.ts` (typed, grouped nav config, `active`/`comingSoon` status — single source of truth for both the pill nav and the "coming soon" teaser), `AccountShell.tsx`/`ComingSoonGrid.tsx` (storefront-styled, no admin chrome), `src/app/account/layout.tsx` (`verifySession()` gate), Profile (`page.tsx`/`ProfileForm.tsx`/`actions.ts` — `updateProfile`), Addresses (`addresses/{page.tsx,actions.ts}` + `AddressesView`/`AddressCard`/`AddressForm` — full CRUD via a `Sheet`, set-default unsets the prior default first, no transaction, same posture as ADR-015/016), Orders/Wishlist UI-only placeholders, `src/lib/supabase/queries/account.ts` (`getProfile` wrapped in `React.cache`, `getAddresses`). No new RLS/migrations needed. Also fixed a Sprint 7.0 bug found during this sprint's verification: Base UI's `DropdownMenuLabel` needs a `<DropdownMenuGroup>` wrapper. |
 | Sprint 7.2 | **Cart & Session Continuity** — `carts` + `cart_items` tables, normalized, structurally parallel to `orders`/`order_items`, server-persisted for authenticated users only (guests stay client-only). No price/name snapshot on `cart_items` — reflects live product data. `cart_items.source` prepared for future `'ai'`/`'partner'` attribution (unconstrained text, not a `CHECK` enum, so no migration needed to introduce a new source later). Migration `20260714000001_cart_schema.sql`, applied to the linked project. RLS matches the `addresses`/`wishlists` `auth.uid()`-owned-row pattern. See ADR-021. **Application layer**: `src/app/cart/actions.ts` (add/update/remove/clear/merge/fetch Server Actions), `src/lib/supabase/queries/cart.ts`, and `src/lib/store.ts` extended with `userId`/`setUserId` so the existing Zustand cart merges a guest's local cart into the server on first login, hydrates from the server on return visits, and clears on sign-out — `CartDrawer.tsx`/`src/app/cart/page.tsx` unchanged. Also includes the post-7.1 Navbar UX integration (My Account/Addresses/Orders/Wishlist links). |
+| Sprint 8.0 | **Checkout (Milestone 2: First Sale)** — `products.sku`, `orders.shipping_method`, `carts.converted_order_id`, and the first-ever `orders`/`order_items` INSERT RLS policies (migration `20260715000001_checkout_write_access.sql`); two `SECURITY DEFINER` RPC functions so Stripe's webhook can write to `orders` with no service-role key (migration `20260715000002_stripe_payment_functions.sql`). Guests browse the full checkout flow; `createOrder()` requires a session, identified inline (no `next=`-redirect-back). `src/app/checkout/{page.tsx,actions.ts}` + `src/components/checkout/*` (shipping/billing via reused `AddressForm`, static delivery options, order review, immutable `order_items.product_snapshot`). Provider-agnostic `src/lib/payments/` with Stripe as the only concrete provider (PayPal/Klarna/Apple Pay/Google Pay can be added behind the same boundary later); `/api/payments/stripe/intent`, `/api/webhooks/stripe`, `CheckoutPayment.tsx` gracefully degrade without configured Stripe keys. Order confirmation (`/order-confirmation/[orderNumber]`) and real order history (`/account/orders`, replacing the Sprint 7.1 placeholder). See ADR-022. |
 
 ---
 
@@ -78,8 +95,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 
 | Sprint | Goal |
 |---|---|
-| Sprint 7.2 (application layer) | Cart & Session Continuity — merge-on-login flow, cart Server Actions, Zustand/UI changes to read from the server cart for authenticated users. Schema is already done (see above, ADR-021) — this is the remaining, not-yet-scoped work. |
-| Sprint 8 | Stripe payments + orders system + order confirmation email (Resend) — will wire real data into the existing `/account/orders` placeholder |
+| Sprint 8.1 | Payment Activation & Order Notifications — configure Stripe keys and verify a real test-mode charge end-to-end (the integration is fully coded, see Sprint 8.0 above), order confirmation email (Resend), tax calculation (currently hardcoded to 0), coupon redemption UI at checkout (`coupons`/`coupon_redemptions` tables already exist) |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
 
 **Do NOT implement** Sprint 7.2's application layer, Stripe, or AI search until the relevant sprint begins.

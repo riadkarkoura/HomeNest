@@ -24,6 +24,14 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // Checkout (Sprint 8.0, ADR-022): guests may browse the full checkout
+  // flow. Only placing an order requires a session, and that's enforced
+  // inside createOrder() itself (getUser(), RLS orders_own_insert) — not
+  // here. Do not gate /checkout the way /account/* is gated below.
+  if (pathname.startsWith("/checkout")) {
+    return response;
+  }
+
   // Customer-facing protected routes (Sprint 7.0) — same optimistic,
   // session-only check as above, no role check. RLS remains the real
   // boundary for any data these routes touch.

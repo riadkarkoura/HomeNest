@@ -71,6 +71,7 @@ work. None of them are things application code can fix.
 | Auth email rate limit | Supabase Dashboard → Authentication → Rate Limits | Low; exhausted during Sprint 7.0 verification after several registration attempts in one session, and easy to re-hit. Exact remote value unconfirmed — don't assume it matches `config.toml`'s `email_sent = 2`. Budget fresh-signup attempts accordingly (§1). |
 | Google OAuth provider | Supabase Dashboard → Authentication → Providers → Google | **Disabled.** `supabase/config.toml`'s `[auth.external.google]` has `enabled = false`, `client_id`/`secret` sourced from unset env vars (`SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`/`_SECRET`). See the checklist below. |
 | Redirect URL allow-list | Supabase Dashboard → Authentication → URL Configuration → Redirect URLs | Must include `http://localhost:3000/auth/callback` for local dev OAuth/password-recovery redirects to be accepted. Not confirmed present — check before testing OAuth. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `.env.local` | **Not set (Sprint 8.0).** The `stripe` SDK, `/api/payments/stripe/intent`, and `/api/webhooks/stripe` are fully coded and reachable, but `createStripePaymentIntent()` returns a clean "Stripe is not configured yet" error without these — verified during Sprint 8.0 by placing a real order end-to-end and confirming the checkout page shows that message instead of crashing (`src/components/checkout/CheckoutPayment.tsx`). Same category of external, non-app-code blocker as Google OAuth below. |
 
 ---
 
@@ -139,7 +140,29 @@ account.
 
 ---
 
-## 5. Manual Verification Checklist
+## 5. Stripe Setup Checklist
+
+Stripe is fully wired in code (`src/lib/payments/stripe.ts`, `/api/payments/stripe/intent`,
+`/api/webhooks/stripe`, `src/components/checkout/CheckoutPayment.tsx`) but cannot process a real
+charge until someone with Stripe Dashboard access completes this one-time setup.
+
+1. In the Stripe Dashboard (test mode), copy the **Publishable key** and **Secret key** from
+   Developers → API keys.
+2. Set `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` and `STRIPE_SECRET_KEY` in `.env.local`.
+3. Create a webhook endpoint (Developers → Webhooks) pointing at
+   `https://<your-domain>/api/webhooks/stripe` (use the Stripe CLI's `stripe listen --forward-to
+   localhost:3000/api/webhooks/stripe` for local dev), subscribed to at minimum
+   `payment_intent.succeeded` and `payment_intent.payment_failed`.
+4. Copy the webhook's **Signing secret** into `STRIPE_WEBHOOK_SECRET`.
+5. **Verify the setup, not just the app**: place a real order through `/checkout` with a
+   [Stripe test card](https://docs.stripe.com/testing#cards). Expect the Payment Element to render
+   instead of the "Stripe is not configured yet" fallback message, and the order's
+   `payment_status` to flip from `unpaid` to `paid` after the webhook fires (check
+   `/account/orders/[orderNumber]`).
+
+---
+
+## 6. Manual Verification Checklist
 
 Run through this after any change touching auth, using the persistent test account from §1 for
 every item except Registration.
@@ -164,19 +187,26 @@ every item except Registration.
       design) → check the inbox for the reset email → follow the link → should land on
       `/auth/reset-password` with an active recovery session → submit a new password → expect
       redirect to `/login` → log in with the new password to confirm it took effect.
-- [ ] **Protected routes (logged out)** — visit `/account` and `/checkout` directly; expect
-      redirect to `/login` in both cases. Visit `/admin`; expect redirect to `/admin/login`
-      (confirms the customer-route proxy changes didn't regress the separate admin gate).
+- [ ] **Protected routes (logged out)** — visit `/account` directly; expect redirect to `/login`.
+      Visit `/checkout` directly; expect **no** redirect (Sprint 8.0, ADR-022 — guests may browse
+      the full checkout flow) — the page should render with the inline sign-in/create-account
+      step in place of the address/delivery/review sections. Visit `/admin`; expect redirect to
+      `/admin/login` (confirms the customer-route proxy changes didn't regress the separate admin
+      gate).
 - [ ] **Protected routes (logged in)** — visit `/account` while signed in; expect the Profile
-      page, not a redirect. Visit `/checkout` while signed in; expect **no** redirect to `/login`
-      (a 404 is fine and expected — no page exists behind that gate yet, that's Sprint 8 — but
-      bouncing back to `/login` would indicate a proxy bug).
+      page, not a redirect. Visit `/checkout` while signed in; expect the full shipping/billing/
+      delivery/review flow, not the identify step.
+- [ ] **Checkout → order placement (Sprint 8.0)** — from a guest session with items in the cart,
+      sign in inline on `/checkout`, select a shipping address and delivery option, click "Place
+      Order". Expect: the order appears immediately at `/account/orders`, the local cart empties,
+      and the payment step shows either a Stripe Payment Element (if configured, §5) or the
+      "Stripe is not configured yet" fallback with a working "View Order" link — never a crash.
 - [ ] **Production build** — `npm run build`; expect a clean TypeScript + ESLint pass and all
       routes listed with no errors.
 
 ---
 
-## 6. Known Limitations
+## 7. Known Limitations
 
 - **Supabase's auth email rate limit is easy to exhaust during manual testing.** Budget
   registration attempts accordingly (see §1); don't burn them on repeated login/logout checks.
@@ -189,9 +219,17 @@ every item except Registration.
   This is a real UX gap (a disabled/misconfigured provider should tell the user something went
   wrong) but was left unfixed per Sprint 7.0's "verification only, no code changes" scope — flag
   it for a future small fix rather than re-discovering it as a mystery.
-- **`/checkout` still has no page** (Sprint 8). Protected-route testing there can only confirm
-  the redirect behavior at the proxy level. `/account/*` pages (Profile, Addresses, Orders,
-  Wishlist) do exist as of Sprint 7.1.
+- **Stripe payment collection is coded but unconfigured** (Sprint 8.0) — see §2 and §5. Orders
+  place successfully and are stored as `pending`/`unpaid`; no real charge can be tested until
+  Stripe keys are added.
+- **The browser automation tool used for this project's verification sometimes fails to register
+  clicks on visually-hidden (`sr-only`) radio inputs and on `useActionState`-backed form submit
+  buttons**, even though the underlying React wiring is correct — confirmed during Sprint 8.0 by
+  dispatching the same interaction via `form.requestSubmit()` / `element.click()` through
+  `preview_eval` and observing it work every time the click tool itself didn't. Same category as
+  the pre-existing 0×0-viewport quirk below: an automation-tool limitation, not an app bug. If a
+  click silently does nothing during verification, retry via a direct DOM `.click()`/
+  `.requestSubmit()` before assuming the feature is broken.
 - **No automated tests exist for any auth flow.** All verification here is manual and
   browser-driven; there is no CI safety net yet (matches the project-wide "No automated tests
   yet" status in `SESSION.md`).

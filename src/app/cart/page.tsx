@@ -177,9 +177,11 @@ export default function CartPage() {
                 <span>${grandTotal.toLocaleString()}</span>
               </div>
 
-              <Button className="w-full bg-stone-900 hover:bg-amber-700 text-white py-6 text-base">
-                Proceed to Checkout <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
+              <Link href="/checkout">
+                <Button className="w-full bg-stone-900 hover:bg-amber-700 text-white py-6 text-base">
+                  Proceed to Checkout <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
 
               <p className="text-xs text-stone-400 text-center">
                 Secure checkout · SSL encrypted
