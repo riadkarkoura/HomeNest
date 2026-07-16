@@ -84,8 +84,11 @@ export default function CheckoutPayment({ orderNumber }: Props) {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-stone-100 bg-white p-6">
-        <p className="text-sm text-stone-500">Preparing payment…</p>
+      <div className="rounded-2xl border border-stone-100 bg-white p-6 space-y-4">
+        <div className="h-5 w-24 animate-pulse rounded bg-stone-100" />
+        <div className="h-11 w-full animate-pulse rounded-lg bg-stone-100" />
+        <div className="h-11 w-full animate-pulse rounded-lg bg-stone-100" />
+        <div className="h-11 w-full animate-pulse rounded-lg bg-stone-100" />
       </div>
     );
   }

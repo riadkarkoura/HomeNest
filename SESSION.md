@@ -1,8 +1,8 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 8.0 — Checkout Architecture Review & Implementation — ✅ COMPLETE (Milestone 2: First
-Sale). Sprints 7.0, 7.1, and 7.2 are also complete.
+Sprint 8.1 — Checkout UI & Flow Hardening — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2, and 8.0 (Milestone
+2: First Sale) are also complete.
 
 ## Last Completed
 - ✅ Product Create
@@ -61,6 +61,13 @@ Sale). Sprints 7.0, 7.1, and 7.2 are also complete.
 - ✅ Order confirmation page (`/order-confirmation/[orderNumber]`) and real order history/detail at
   `/account/orders` and `/account/orders/[orderNumber]` (replacing the Sprint 7.1 placeholder),
   sharing one `OrderSummary` component
+- ✅ Checkout UI & Flow Hardening (Sprint 8.1): visual step indicator
+  (`CheckoutSteps.tsx`, guidance only — no navigation/routing added), a `CheckoutClient`-local
+  hydration guard (`useCartStore.persist.hasHydrated()`/`onFinishHydration()` — `store.ts` itself
+  untouched) via a new `CheckoutSkeleton.tsx`, server-side Zod validation on `createOrder()` with
+  `shippingMethodId`'s enum derived from `SHIPPING_OPTIONS` at runtime (never a hand-typed
+  literal), per-section inline validation hints, and loading-state polish on `CheckoutPayment.tsx`
+  / `CheckoutIdentify.tsx`
 
 ## Current Status
 Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
@@ -238,11 +245,35 @@ Verified live against the linked Supabase project using the same permanent test 
   interaction via `element.click()` / `form.requestSubmit()` through `preview_eval`, which worked
   every time. Documented in `TESTING.md` §7 as an automation-tool limitation, not an app bug.
 
+## Sprint 8.1 Verification (2026-07-16)
+
+Verified live using the dev server and the permanent test account (per `TESTING.md` §1):
+
+- **Step indicator accuracy — PASS.** Signed in with an address already saved: Billing/Delivery
+  showed complete immediately (their defaults — "same as shipping" and Standard Delivery — start
+  satisfied), Shipping and the combined Review checkmark stayed incomplete until an address was
+  selected, then all four filled in correctly.
+- **Per-section hints — PASS.** The amber "Select or add an address to continue." hint appeared
+  directly under Shipping Address while incomplete and disappeared the moment an address was
+  selected.
+- **No empty-cart flash — PASS.** Reloaded `/checkout` multiple times with items already in
+  `localStorage`; the skeleton (or full flow) rendered correctly with no empty-cart screen ever
+  appearing.
+- **`createOrder` Zod validation — PASS.** Placed a real order (order `HN-20260716-0005`) after
+  the schema change with no regression — confirms the new validation doesn't reject legitimate
+  input; cart merged, order created, cart cleared, order appeared at `/account/orders` correctly.
+- **Mobile pass (375×812) — PASS.** Step indicator wraps to a second line cleanly, all sections
+  stack full-width with no horizontal overflow.
+- **Production build — PASS**, run twice (before and after the full set of changes).
+- **Tooling note:** the same previously-documented `sr-only` radio / form-submission automation
+  quirk (`TESTING.md` §7) recurred this session under the newer browser tool set — same root
+  cause, same workaround (`element.click()` via direct JS execution), not a new issue.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.0 is complete. The next candidate is Sprint 8.1 — Payment Activation & Order
+Sprint 8.1 is complete. The next candidate is Sprint 8.2 — Payment Activation & Order
 Notifications (configure Stripe keys, verify a real charge, order confirmation email, tax
 calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT start new
 work without explicit user instruction.

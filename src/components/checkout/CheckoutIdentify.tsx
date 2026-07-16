@@ -94,7 +94,8 @@ export default function CheckoutIdentify({ onIdentified }: Props) {
         <button
           type="button"
           onClick={() => setIsRegister(!isRegister)}
-          className="text-amber-600 hover:underline font-medium"
+          disabled={pending}
+          className="text-amber-600 hover:underline font-medium disabled:opacity-40 disabled:no-underline"
         >
           {isRegister ? "Sign in" : "Create one"}
         </button>

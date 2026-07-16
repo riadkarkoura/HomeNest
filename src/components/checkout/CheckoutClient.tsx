@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import CheckoutIdentify from "./CheckoutIdentify";
 import CheckoutAddressPicker from "./CheckoutAddressPicker";
 import CheckoutPayment from "./CheckoutPayment";
+import CheckoutSteps from "./CheckoutSteps";
+import CheckoutSkeleton from "./CheckoutSkeleton";
 import { createOrder } from "@/app/checkout/actions";
 import { SHIPPING_OPTIONS, DEFAULT_SHIPPING_OPTION_ID } from "@/lib/checkout/shipping-options";
 import type { AddressRow } from "@/lib/supabase/queries/account";
@@ -29,6 +31,18 @@ interface Props {
 export default function CheckoutClient({ initialUser, initialAddresses }: Props) {
   const router = useRouter();
   const { items, totalPrice } = useCartStore();
+
+  // Local to this component only -- useCartStore's public API/behavior is
+  // unchanged (Sprint 8.1). Zustand's persist middleware already exposes a
+  // hasHydrated()/onFinishHydration() pair regardless of anything defined in
+  // store.ts; without this guard, `items` reads as [] for one render frame
+  // before localStorage rehydrates, which briefly shows the empty-cart
+  // screen to a returning customer who actually has items in their cart.
+  const [hasHydrated, setHasHydrated] = useState(() => useCartStore.persist.hasHydrated());
+  useEffect(() => {
+    setHasHydrated(useCartStore.persist.hasHydrated());
+    return useCartStore.persist.onFinishHydration(() => setHasHydrated(true));
+  }, []);
 
   const [user, setUser] = useState(initialUser);
   const [identifying, setIdentifying] = useState(false);
@@ -78,12 +92,12 @@ export default function CheckoutClient({ initialUser, initialAddresses }: Props)
     router.refresh();
   }
 
+  const shippingComplete = !!shippingAddressId;
+  const billingComplete = billingSameAsShipping || !!billingAddressId;
+  const deliveryComplete = !!shippingMethodId;
+
   const canPlaceOrder =
-    !!user &&
-    !!shippingAddressId &&
-    (billingSameAsShipping || !!billingAddressId) &&
-    items.length > 0 &&
-    !placing;
+    !!user && shippingComplete && billingComplete && items.length > 0 && !placing;
 
   async function handlePlaceOrder() {
     if (!shippingAddressId) return;
@@ -111,6 +125,13 @@ export default function CheckoutClient({ initialUser, initialAddresses }: Props)
     // -- the order already exists as pending/unpaid, so show the payment
     // step next rather than navigating away immediately.
     setPlacedOrderNumber(result.orderNumber);
+  }
+
+  // Checked first: before hydration finishes, `items` reads as [] regardless
+  // of what's actually in localStorage -- showing the skeleton here avoids
+  // the empty-cart screen flashing for a returning customer.
+  if (!hasHydrated) {
+    return <CheckoutSkeleton />;
   }
 
   // Checked before the empty-cart guard below: clearCart() already emptied
@@ -170,8 +191,20 @@ export default function CheckoutClient({ initialUser, initialAddresses }: Props)
               <CheckoutIdentify onIdentified={handleIdentified} />
             ) : (
               <>
+                <CheckoutSteps
+                  steps={[
+                    { label: "Shipping", complete: shippingComplete },
+                    { label: "Billing", complete: billingComplete },
+                    { label: "Delivery", complete: deliveryComplete },
+                    { label: "Review", complete: shippingComplete && billingComplete },
+                  ]}
+                />
+
                 <section className="rounded-2xl border border-stone-100 bg-white p-6 space-y-4">
                   <h2 className="font-semibold text-stone-900 text-lg">Shipping Address</h2>
+                  {!shippingComplete && (
+                    <p className="text-xs text-amber-600">Select or add an address to continue.</p>
+                  )}
                   <CheckoutAddressPicker
                     addresses={shippingAddresses}
                     selectedId={shippingAddressId}
@@ -193,13 +226,20 @@ export default function CheckoutClient({ initialUser, initialAddresses }: Props)
                     Same as shipping address
                   </label>
                   {!billingSameAsShipping && (
-                    <CheckoutAddressPicker
-                      addresses={billingAddresses}
-                      selectedId={billingAddressId}
-                      onSelect={setBillingAddressId}
-                      onAdded={handleAddressAdded}
-                      emptyLabel="No billing addresses saved yet — add one below."
-                    />
+                    <>
+                      {!billingAddressId && (
+                        <p className="text-xs text-amber-600">
+                          Select or add a billing address to continue.
+                        </p>
+                      )}
+                      <CheckoutAddressPicker
+                        addresses={billingAddresses}
+                        selectedId={billingAddressId}
+                        onSelect={setBillingAddressId}
+                        onAdded={handleAddressAdded}
+                        emptyLabel="No billing addresses saved yet — add one below."
+                      />
+                    </>
                   )}
                 </section>
 
@@ -271,9 +311,9 @@ export default function CheckoutClient({ initialUser, initialAddresses }: Props)
                     {placing ? "Placing your order…" : "Place Order"}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
-                  {!shippingAddressId && (
+                  {!(shippingComplete && billingComplete) && (
                     <p className="text-xs text-stone-400 text-center">
-                      Select a shipping address to continue.
+                      Complete the steps above to place your order.
                     </p>
                   )}
                 </section>

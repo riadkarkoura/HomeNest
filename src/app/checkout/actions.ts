@@ -4,7 +4,11 @@ import { z } from "zod";
 import { getUser } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateActiveCart } from "@/lib/supabase/queries/cart";
-import { getShippingOption, DEFAULT_SHIPPING_OPTION_ID } from "@/lib/checkout/shipping-options";
+import {
+  SHIPPING_OPTIONS,
+  getShippingOption,
+  DEFAULT_SHIPPING_OPTION_ID,
+} from "@/lib/checkout/shipping-options";
 import type { OrderItemSnapshot } from "@/lib/supabase/queries/orders";
 
 // ── Inline identify (Sprint 8.0, ADR-022) ───────────────────────────────────
@@ -89,6 +93,18 @@ export type CreateOrderResult =
   | { ok: true; orderNumber: string }
   | { ok: false; error: string };
 
+// SHIPPING_OPTIONS is the single source of truth for valid shipping method
+// ids -- deriving the enum from it here means this schema can never drift
+// out of sync with src/lib/checkout/shipping-options.ts (Sprint 8.1).
+const SHIPPING_OPTION_IDS = SHIPPING_OPTIONS.map((option) => option.id) as [string, ...string[]];
+
+const CreateOrderSchema = z.object({
+  shippingAddressId: z.string().uuid(),
+  billingAddressId: z.string().uuid().nullable(),
+  shippingMethodId: z.enum(SHIPPING_OPTION_IDS),
+  customerNotes: z.string().max(500).optional(),
+});
+
 interface CartLineRow {
   quantity: number;
   product_id: string;
@@ -122,6 +138,11 @@ function toAddressSnapshot(row: Record<string, unknown>) {
 // migration 20260715000001. No trust is placed in client-submitted prices
 // or totals -- everything is re-fetched live from the DB below.
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
+  const parsed = CreateOrderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Invalid checkout details. Please refresh and try again." };
+  }
+
   const session = await getUser();
   if (!session) {
     return { ok: false, error: "Please sign in or create an account to place your order." };
@@ -206,7 +227,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const { data: shippingAddress, error: shippingError } = await supabase
       .from("addresses")
       .select("*")
-      .eq("id", input.shippingAddressId)
+      .eq("id", parsed.data.shippingAddressId)
       .eq("user_id", user.id)
       .single();
 
@@ -215,11 +236,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
 
     let billingSnapshot = toAddressSnapshot(shippingAddress);
-    if (input.billingAddressId) {
+    if (parsed.data.billingAddressId) {
       const { data: billingAddress, error: billingError } = await supabase
         .from("addresses")
         .select("*")
-        .eq("id", input.billingAddressId)
+        .eq("id", parsed.data.billingAddressId)
         .eq("user_id", user.id)
         .single();
 
@@ -230,7 +251,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
 
     const shippingOption =
-      getShippingOption(input.shippingMethodId) ?? getShippingOption(DEFAULT_SHIPPING_OPTION_ID)!;
+      getShippingOption(parsed.data.shippingMethodId) ?? getShippingOption(DEFAULT_SHIPPING_OPTION_ID)!;
 
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
     const shippingCost = shippingOption.cost;
@@ -255,10 +276,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         currency: "USD",
         payment_provider: "stripe",
         shipping_method: shippingOption.id,
-        shipping_address_id: input.shippingAddressId,
+        shipping_address_id: parsed.data.shippingAddressId,
         shipping_address_snapshot: toAddressSnapshot(shippingAddress),
         billing_address_snapshot: billingSnapshot,
-        customer_notes: input.customerNotes ?? null,
+        customer_notes: parsed.data.customerNotes ?? null,
       })
       .select("id, order_number")
       .single();

@@ -203,6 +203,26 @@ every item except Registration.
       "Stripe is not configured yet" fallback with a working "View Order" link — never a crash.
 - [ ] **Production build** — `npm run build`; expect a clean TypeScript + ESLint pass and all
       routes listed with no errors.
+- [ ] **Step indicator (Sprint 8.1)** — on `/checkout` while signed in, confirm Shipping/Billing/
+      Delivery/Review each show a filled checkmark only once that section is actually satisfied
+      (Billing and Delivery start pre-satisfied via their defaults — "same as shipping" and
+      "Standard Delivery" — Shipping and the combined Review checkmark should not fill in until a
+      shipping address is selected).
+- [ ] **Per-section validation hints (Sprint 8.1)** — with no shipping address selected, confirm
+      the amber hint appears directly under "Shipping Address", not only near the Place Order
+      button. Uncheck "Same as shipping address" with no billing address selected; confirm the
+      equivalent hint appears under "Billing Address".
+- [ ] **No empty-cart flash on reload (Sprint 8.1)** — with items already in the cart
+      (`localStorage`), reload `/checkout` several times; confirm the page never briefly shows
+      "Your cart is empty" before the real items appear. If it does, `CheckoutClient`'s hydration
+      guard (`useCartStore.persist.hasHydrated()`) has regressed.
+- [ ] **`createOrder` input validation (Sprint 8.1)** — confirm placing a normal order still
+      succeeds (the new Zod schema must not reject valid input); a malformed request (wrong-shaped
+      IDs) should return "Invalid checkout details. Please refresh and try again." rather than a
+      raw error.
+- [ ] **Mobile pass (Sprint 8.1)** — resize to 375×812; confirm the step indicator wraps cleanly,
+      every section stacks full-width with no horizontal overflow, and the Order Summary sits
+      below the form sections rather than overlapping them.
 
 ---
 
