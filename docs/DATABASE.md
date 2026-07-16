@@ -632,7 +632,7 @@ Line items in a cart. Deliberately holds **no price/name snapshot** — unlike `
 | `added_at` | `timestamptz` | NOT NULL DEFAULT `now()` | When this line was first added |
 | `updated_at` | `timestamptz` | NOT NULL DEFAULT `now()` | Bumped on quantity changes |
 
-**Unique constraint:** `UNIQUE (cart_id, product_id, variant_id)` — adding an already-present product increments `quantity` (upsert) rather than inserting a duplicate row.
+**Unique constraint:** `UNIQUE (cart_id, product_id, variant_id)` — adding an already-present product increments `quantity` (upsert) rather than inserting a duplicate row. **Note (Patch 8.2.1):** this alone never fires when `variant_id IS NULL` — standard SQL uniqueness semantics never treat two `NULL`s as equal, so it silently permitted duplicate `(cart_id, product_id, NULL)` rows under concurrent adds (100% of the catalogue has no variants today). Closed by a second, partial unique index: `cart_items_cart_product_no_variant_key` — `UNIQUE (cart_id, product_id) WHERE variant_id IS NULL`, added in migration `20260716000002_cart_items_null_variant_unique.sql`. See ADR-021 addendum.
 
 **Indexes:**
 ```
@@ -1821,5 +1821,5 @@ Tables must be created in dependency order to satisfy foreign key constraints:
 ---
 
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-16 — added `create_order_atomic()` RPC function and documented the previously-undocumented `record_stripe_payment_intent()`/`apply_stripe_payment_result()` functions (Sprint 8.2, ADR-023)*
+*Last updated: 2026-07-16 — added a partial unique index closing the `cart_items` NULL-variant race (Patch 8.2.1, ADR-021 addendum); added `create_order_atomic()` RPC function and documented the previously-undocumented `record_stripe_payment_intent()`/`apply_stripe_payment_result()` functions (Sprint 8.2, ADR-023)*
 *Next review: before writing the first Supabase migration*

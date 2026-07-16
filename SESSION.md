@@ -2,7 +2,8 @@
 
 ## Current Sprint
 Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency) — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
-8.0 (Milestone 2: First Sale), and 8.1 are also complete.
+8.0 (Milestone 2: First Sale), and 8.1 are also complete. Patch 8.2.1 (`cart_items` NULL-variant
+race, found during a pre-8.3 architecture audit) is also complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -299,14 +300,41 @@ Verified against the linked Supabase project:
   confirmation is wanted later, it belongs on a disposable local Supabase instance
   (`supabase start`), never the shared linked project.
 
+## Patch 8.2.1 Verification (2026-07-16)
+
+Fixes a real gap surfaced by a full Commerce Layer architecture audit performed before Sprint 8.3:
+`UNIQUE (cart_id, product_id, variant_id)` never fires when `variant_id IS NULL` (standard SQL
+uniqueness semantics never treat two `NULL`s as equal), so two concurrent "add to cart" requests
+for the same non-variant product (100% of the catalogue today) could each insert a separate
+`cart_items` row instead of the second one hitting a unique violation and falling back to an
+`UPDATE`, as `incrementCartItem()` already assumed happens.
+
+- **Pre-check for existing duplicates — PASS, none found.** Queried the live table for
+  `(cart_id, product_id)` groups with `variant_id IS NULL` and more than one row — zero results, so
+  no data cleanup was needed before adding the index.
+- **Partial unique index applied — PASS.** `cart_items_cart_product_no_variant_key`
+  (`UNIQUE (cart_id, product_id) WHERE variant_id IS NULL`), migration
+  `20260716000002_cart_items_null_variant_unique.sql`, additive only — the original constraint is
+  untouched and still protects the has-variant case.
+- **Fix confirmed working — PASS.** Attempted a literal duplicate insert against a real existing
+  row; correctly rejected with `duplicate key value violates unique constraint
+  "cart_items_cart_product_no_variant_key"`. The failed statement rolled back automatically, so no
+  row was created and no cleanup was needed.
+- **Normal usage unregressed — PASS.** Sequential add-to-cart clicks on the same product still
+  correctly increment one row's quantity (verified both client-side and by reading the row back
+  directly from the database) — no behavior change for the non-racing case.
+- **Production build — PASS** (no application code changed; this is a database-only migration).
+- **Isolation confirmed:** no changes to the Order Engine, Checkout, RLS policies, or any table
+  other than `cart_items`'s indexes.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.2 is complete. The next candidate is Sprint 8.3 — Payment Activation & Order
-Notifications (configure Stripe keys, verify a real charge, order confirmation email, tax
-calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT start new
-work without explicit user instruction.
+Sprint 8.2 and Patch 8.2.1 are both complete. The next candidate is Sprint 8.3 — Payment
+Activation & Order Notifications (configure Stripe keys, verify a real charge, order confirmation
+email, tax calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT
+start new work without explicit user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)
