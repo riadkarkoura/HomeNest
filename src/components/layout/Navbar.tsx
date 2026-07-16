@@ -553,6 +553,27 @@ export default function Navbar() {
   const router = useRouter();
   const totalItems = useCartStore((s) => s.totalItems)();
 
+  // Local to Navbar only -- useCartStore's public API/behavior is
+  // unchanged (same pattern as CheckoutClient's hydration guard, Sprint
+  // 8.1, applied here in Navbar's own scope). useCartStore's `persist`
+  // middleware can't read localStorage during SSR, so `totalItems` is 0
+  // in the server-rendered HTML and in React's first hydration pass --
+  // rendering the real (rehydrated) value before this flips true is what
+  // produced the "Cart, 0 items" vs "Cart, 3 items" mismatch. Initial
+  // state is a plain `false` literal (never touching `useCartStore.persist`
+  // during render) and every read of it is deferred into `useEffect`,
+  // which React guarantees never runs during server/build-time rendering
+  // -- `useCartStore.persist` isn't available in Next's static-prerender
+  // worker (a different context from a real request-time SSR pass), and
+  // CheckoutClient's identical lazy-initializer form only ever avoided
+  // that crash because `/checkout` is never statically prerendered.
+  const [hasHydrated, setHasHydrated] = useState(false);
+  useEffect(() => {
+    setHasHydrated(useCartStore.persist.hasHydrated());
+    return useCartStore.persist.onFinishHydration(() => setHasHydrated(true));
+  }, []);
+  const displayTotalItems = hasHydrated ? totalItems : 0;
+
   const [scrolled,    setScrolled]    = useState(false);
   const [activeMenu,  setActiveMenu]  = useState<string | null>(null);
   const [searchOpen,  setSearchOpen]  = useState(false);
@@ -844,13 +865,13 @@ export default function Navbar() {
                     whileHover={{ scale: 1.08 }}
                     whileTap={{ scale: 0.94 }}
                     className="relative flex h-9 w-9 items-center justify-center"
-                    aria-label={`Cart, ${totalItems} items`}
+                    aria-label={`Cart, ${displayTotalItems} items`}
                   />
                 }
               >
                 <ShoppingCart className="h-[16px] w-[16px]" />
                 <AnimatePresence>
-                  {totalItems > 0 && (
+                  {displayTotalItems > 0 && (
                     <motion.span
                       key="cart-badge"
                       initial={{ scale: 0, opacity: 0 }}
@@ -859,7 +880,7 @@ export default function Navbar() {
                       transition={{ type: "spring", stiffness: 420, damping: 18 }}
                       className="absolute -top-0.5 -right-0.5 h-[14px] w-[14px] rounded-full bg-amber-600 text-white text-[8px] font-medium flex items-center justify-center leading-none"
                     >
-                      {totalItems}
+                      {displayTotalItems}
                     </motion.span>
                   )}
                 </AnimatePresence>

@@ -235,6 +235,11 @@ every item except Registration.
       wasn't warranted for this verification. If this needs empirical (not just reasoned)
       confirmation later, do it against a disposable local Supabase instance (`supabase start`),
       never the shared linked project.
+- [ ] **Navbar cart-badge hydration (Patch 8.2.2)** — with items already in the cart
+      (`localStorage`), hard-reload any page; confirm no "Cart, 0 items" vs "Cart, N items"
+      hydration warning appears in the console and the badge settles to the correct count. Also
+      confirm `npm run build` succeeds for `/cart` (static) and `/account/addresses` (dynamic) —
+      the underlying bug briefly broke the build itself (see Known Limitations).
 
 ---
 
@@ -254,6 +259,21 @@ every item except Registration.
 - **Stripe payment collection is coded but unconfigured** (Sprint 8.0) — see §2 and §5. Orders
   place successfully and are stored as `pending`/`unpaid`; no real charge can be tested until
   Stripe keys are added.
+- **Resolved (Patch 8.2.2): the Navbar cart badge used to hydration-mismatch** ("Cart, 0 items"
+  server-rendered vs. "Cart, N items" once `useCartStore`'s `persist` middleware rehydrated from
+  `localStorage`). Long-observed across earlier sprints but never formally tracked or fixed until
+  now. Fixed with a local hydration guard in `Navbar.tsx` (`useCartStore.persist.hasHydrated()`/
+  `onFinishHydration()`, initial state a plain `false` literal, every read deferred into
+  `useEffect`) — mirrors the Sprint 8.1 `CheckoutClient` guard, scoped to Navbar only, no changes
+  to `useCartStore`'s public API. **Related build-breaking discovery:** the first version of this
+  fix used a `useState(() => useCartStore.persist.hasHydrated())` lazy initializer — identical in
+  shape to `CheckoutClient`'s existing guard — which crashed `next build`'s static-prerender pass
+  with `Cannot read properties of undefined (reading 'hasHydrated')` on `/cart` and
+  `/account/addresses`. `useCartStore.persist` isn't available in that specific build-time worker
+  context (different from a real request-time SSR pass); `CheckoutClient` never hit this because
+  `/checkout` is never statically prerendered. If `CheckoutClient` is ever refactored in a way that
+  makes `/checkout` prerenderable, its identical lazy-initializer pattern carries the same latent
+  risk and should be updated to the effect-only form used here.
 - **The browser automation tool used for this project's verification sometimes fails to register
   clicks on visually-hidden (`sr-only`) radio inputs and on `useActionState`-backed form submit
   buttons**, even though the underlying React wiring is correct — confirmed during Sprint 8.0 by

@@ -28,7 +28,7 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency); Patch 8.2.1 (`cart_items` NULL-variant race) applied on top.  
+**Last sprint completed:** Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency); Patch 8.2.1 (`cart_items` NULL-variant race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) applied on top.  
 **Date of last update:** 2026-07-16
 
 ---
@@ -47,6 +47,8 @@ Planning-first (no code until approved), hardening the order-creation write path
 - Verified live: a normal order placed successfully through the new path (`HN-20260716-0009`), reading back correctly. The concurrency guarantee itself was verified by code review and Postgres's standard `FOR UPDATE` semantics, not a live concurrent-write test against the shared database (deliberately not attempted — would require writing fabricated orders into real project data outside the app layer).
 
 **Patch 8.2.1 — `cart_items` NULL-variant race** (small patch, not a sprint): a full Commerce Layer architecture audit performed just before Sprint 8.3 found that `UNIQUE (cart_id, product_id, variant_id)` never fires when `variant_id IS NULL` (two `NULL`s are never equal under SQL uniqueness semantics), silently permitting duplicate cart line items for the same non-variant product (100% of today's catalogue) under concurrent adds. Fixed with one additive partial unique index (`cart_items_cart_product_no_variant_key`, migration `20260716000002_cart_items_null_variant_unique.sql`) — no application code, no architecture change, fully isolated to `cart_items`. Checked live for pre-existing duplicates first (none found); confirmed post-deploy that a duplicate insert now correctly fails. See ADR-021 addendum.
+
+**Patch 8.2.2 — Navbar cart-badge hydration mismatch** (small patch, not a sprint): `Navbar.tsx` read `useCartStore`'s `totalItems()` with no hydration guard, so the server-rendered HTML always showed `Cart, 0 items` while the client silently updated to the real count once `persist` rehydrated from `localStorage` — long-observed across earlier sprints, never formally fixed until now. Fixed with a local `hasHydrated` guard in `Navbar.tsx` (`useCartStore.persist.hasHydrated()`/`onFinishHydration()`, Zustand's own built-in API) — same pattern as `CheckoutClient`'s Sprint 8.1 guard, scoped entirely to Navbar; no changes to `useCartStore`'s public API, no changes to checkout. **A first attempt using the same lazy-`useState`-initializer form `CheckoutClient` uses broke `next build`** (`Cannot read properties of undefined (reading 'hasHydrated')` on `/cart` and `/account/addresses`'s static-prerender pass) — `useCartStore.persist` isn't available in that build-time worker context, unlike a real request-time SSR pass; `CheckoutClient` never hit this only because `/checkout` is never statically prerendered. Fixed by initializing to a plain `false` literal and deferring every `useCartStore.persist` read into `useEffect`. Verified live: no hydration warning on a hard reload with items in the cart, badge settles correctly, build passes including the two previously-crashing pages.
 
 ---
 

@@ -3,7 +3,7 @@
 ## Current Sprint
 Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency) — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
 8.0 (Milestone 2: First Sale), and 8.1 are also complete. Patch 8.2.1 (`cart_items` NULL-variant
-race, found during a pre-8.3 architecture audit) is also complete — see below.
+race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) are also complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -327,12 +327,41 @@ for the same non-variant product (100% of the catalogue today) could each insert
 - **Isolation confirmed:** no changes to the Order Engine, Checkout, RLS policies, or any table
   other than `cart_items`'s indexes.
 
+## Patch 8.2.2 Verification (2026-07-16)
+
+Fixes a long-observed but never-formally-fixed hydration mismatch: the Navbar cart badge read
+`useCartStore`'s `totalItems()` with no hydration guard, so the server-rendered HTML always showed
+`Cart, 0 items` while the client silently updated to the real count (e.g. 3) once `persist`
+rehydrated from `localStorage` — a moment after React's hydration pass, not part of it.
+
+- **Root cause confirmed** before any code was written, per explicit instruction: no hydration
+  guard anywhere in `Navbar.tsx`'s cart-badge render, unlike `CheckoutClient`'s Sprint 8.1 guard,
+  which only ever covered that one component.
+- **Fix applied — PASS.** A local `hasHydrated` state in `Navbar.tsx`, using
+  `useCartStore.persist.hasHydrated()`/`onFinishHydration()` (Zustand's own built-in API, no
+  changes to `store.ts` or `useCartStore`'s public contract), gating the badge's displayed count.
+- **Build regression found and fixed — PASS.** The first version used a lazy `useState(() => ...)`
+  initializer (identical in shape to `CheckoutClient`'s) that crashed `next build`'s
+  static-prerender pass for `/cart` and `/account/addresses`
+  (`Cannot read properties of undefined (reading 'hasHydrated')`) —
+  `useCartStore.persist` isn't available in that build-time worker context, a different
+  environment from a real request-time SSR pass. `CheckoutClient` never hit this only because
+  `/checkout` is never statically prerendered — same latent risk, just never triggered. Fixed by
+  initializing to a plain `false` literal and moving every `useCartStore.persist` read into
+  `useEffect`, which never runs during server/build-time rendering.
+- **Verified live — PASS.** With 3–5 items in the cart, a hard page reload showed no hydration
+  console warning and the badge settled to the correct count (confirmed via `read_page` and
+  `read_console_messages`).
+- **Production build — PASS**, including the two previously-crashing pages.
+- **Isolation confirmed:** no changes to `useCartStore`'s public API, no changes to
+  `src/app/checkout/*` or any checkout component.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.2 and Patch 8.2.1 are both complete. The next candidate is Sprint 8.3 — Payment
-Activation & Order Notifications (configure Stripe keys, verify a real charge, order confirmation
+Sprint 8.2, Patch 8.2.1, and Patch 8.2.2 are all complete. The next candidate is Sprint 8.3 —
+Payment Activation & Order Notifications (configure Stripe keys, verify a real charge, order confirmation
 email, tax calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT
 start new work without explicit user instruction.
 
