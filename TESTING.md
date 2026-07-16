@@ -223,6 +223,18 @@ every item except Registration.
 - [ ] **Mobile pass (Sprint 8.1)** — resize to 375×812; confirm the step indicator wraps cleanly,
       every section stacks full-width with no horizontal overflow, and the Order Summary sits
       below the form sections rather than overlapping them.
+- [ ] **Order Engine atomicity/idempotency (Sprint 8.2)** — place a normal order; confirm identical
+      behavior to before (order created, cart converted, correct snapshot data at
+      `/account/orders/[orderNumber]`). This now goes through `create_order_atomic()`
+      (`supabase/migrations/20260716000001_order_engine_atomic.sql`) instead of three separate
+      insert/insert/update calls — see ADR-023 for the full concurrency/idempotency design.
+      **Note:** the race-condition guarantee itself (two concurrent requests for the same cart)
+      was verified by code review and Postgres's standard `SELECT ... FOR UPDATE` semantics, not
+      by firing a live concurrent test against the shared linked database — doing so would mean
+      writing fabricated test orders into real project data outside the application layer, which
+      wasn't warranted for this verification. If this needs empirical (not just reasoned)
+      confirmation later, do it against a disposable local Supabase instance (`supabase start`),
+      never the shared linked project.
 
 ---
 

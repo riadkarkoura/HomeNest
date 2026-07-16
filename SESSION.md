@@ -1,8 +1,8 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 8.1 — Checkout UI & Flow Hardening — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2, and 8.0 (Milestone
-2: First Sale) are also complete.
+Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency) — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
+8.0 (Milestone 2: First Sale), and 8.1 are also complete.
 
 ## Last Completed
 - ✅ Product Create
@@ -68,6 +68,14 @@ Sprint 8.1 — Checkout UI & Flow Hardening — ✅ COMPLETE. Sprints 7.0, 7.1, 
   `shippingMethodId`'s enum derived from `SHIPPING_OPTIONS` at runtime (never a hand-typed
   literal), per-section inline validation hints, and loading-state polish on `CheckoutPayment.tsx`
   / `CheckoutIdentify.tsx`
+- ✅ Order Engine Hardening (Sprint 8.2, ADR-023): new `create_order_atomic()` Postgres function
+  (migration `20260716000001_order_engine_atomic.sql`, `SECURITY INVOKER`) replaces `createOrder()`'s
+  three sequential insert/insert/update calls with one atomic, transactional write — a
+  `SELECT ... FOR UPDATE` row lock on the target cart prevents two near-simultaneous checkout
+  requests for the same customer from racing, and reusing `carts.converted_order_id` makes a
+  resubmission idempotent (returns the existing order instead of duplicating). All business logic
+  (validation, pricing, snapshot-building) stays in TypeScript — the function does only the final
+  write. `createOrder()`'s public contract is unchanged.
 
 ## Current Status
 Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
@@ -269,11 +277,33 @@ Verified live using the dev server and the permanent test account (per `TESTING.
   quirk (`TESTING.md` §7) recurred this session under the newer browser tool set — same root
   cause, same workaround (`element.click()` via direct JS execution), not a new issue.
 
+## Sprint 8.2 Verification (2026-07-16)
+
+Verified against the linked Supabase project:
+
+- **Migration applied — PASS.** `20260716000001_order_engine_atomic.sql` applied via
+  `supabase db push`, confirmed matched in `supabase migration list`.
+- **`SECURITY INVOKER` confirmed — PASS.** `SELECT prosecdef FROM pg_proc WHERE proname =
+  'create_order_atomic'` returned `false` (read-only check) — the function runs as the calling
+  role, not a privileged one, exactly as designed.
+- **Normal order placement — PASS.** Placed a real order (`HN-20260716-0009`) through the new
+  atomic path; behavior identical to before (order created, cart converted, correct SKU/name/
+  image snapshot), confirmed by reading it back at `/account/orders/HN-20260716-0009`.
+- **Production build — PASS**, after wiring `createOrder()` to the new `.rpc()` call.
+- **Concurrency guarantee — verified by design/code review, not by a live concurrent-write
+  test.** A live two-simultaneous-request test against the shared linked database was attempted
+  and correctly stopped short: it would have required writing fabricated test orders directly
+  into real project data, bypassing the application layer, which exceeds what this verification
+  needed. The `SELECT ... FOR UPDATE` row-lock mechanism is standard, well-established Postgres
+  behavior (not a novel pattern) — see ADR-023 for the full walkthrough. If empirical
+  confirmation is wanted later, it belongs on a disposable local Supabase instance
+  (`supabase start`), never the shared linked project.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.1 is complete. The next candidate is Sprint 8.2 — Payment Activation & Order
+Sprint 8.2 is complete. The next candidate is Sprint 8.3 — Payment Activation & Order
 Notifications (configure Stripe keys, verify a real charge, order confirmation email, tax
 calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT start new
 work without explicit user instruction.

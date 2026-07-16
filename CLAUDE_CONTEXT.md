@@ -28,26 +28,35 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 8.1 — Checkout UI & Flow Hardening.  
+**Last sprint completed:** Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency).  
 **Date of last update:** 2026-07-16
 
 ---
 
 ## Current Sprint
 
-**Sprint 8.1 — Checkout UI & Flow Hardening** ✅ COMPLETE
+**Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency)** ✅ COMPLETE
 
-Planning-first (no code until approved), then implemented incrementally on top of Sprint 8.0's checkout — no new commerce capability, no payment activation. **Naming note:** reuses the number the Sprint 8.0 closing report had provisionally proposed for "Payment Activation & Order Notifications"; that placeholder was never approved as fixed, so it's renumbered to Sprint 8.2 in `docs/ROADMAP.md` (same reuse-and-disambiguate precedent as ADR-020).
+Planning-first (no code until approved), hardening the order-creation write path itself — no new UI, no payment activation. **Naming note:** reuses the number the Sprint 8.1 entry had provisionally reserved for "Payment Activation & Order Notifications"; that placeholder was never approved as fixed, so it's renumbered to Sprint 8.3 in `docs/ROADMAP.md`.
 
-- **Visual step indicator** (`src/components/checkout/CheckoutSteps.tsx`) — Shipping/Billing/Delivery/Review completion, computed from existing state. Guidance only; no wizard navigation, per-step routing, or back-button system introduced, per explicit instruction.
-- **Hydration guard, local to `CheckoutClient` only** — `useCartStore.persist.hasHydrated()`/`onFinishHydration()` (Zustand's own built-in persist API, not a change to `store.ts`'s public contract) gate a new `CheckoutSkeleton.tsx`, so a returning customer's cart never briefly reads as empty before `localStorage` rehydrates. Same root cause as the pre-existing Navbar cart-badge hydration mismatch, addressed here for checkout specifically.
-- **Server-side validation** — `createOrder()` now Zod-parses its input first. `shippingMethodId`'s enum is derived from `SHIPPING_OPTIONS.map(o => o.id)` at runtime, per explicit instruction, so it can never drift from `src/lib/checkout/shipping-options.ts`.
-- **Per-section inline hints** and **loading-state polish** (`CheckoutPayment.tsx`'s skeleton, `CheckoutIdentify.tsx`'s toggle disabled while pending) round out the hardening pass.
-- Verified live: step-indicator accuracy, hint visibility, no empty-cart flash across repeated reloads, a real order placed successfully post-validation-change, mobile pass at 375×812.
+- **Atomic write** (migration `20260716000001_order_engine_atomic.sql`, ADR-023) — `create_order_atomic(...)` replaces `createOrder()`'s three sequential calls (insert `orders`, insert `order_items`, update `carts`) with one Postgres function running inside a single implicit transaction. A mid-sequence failure can no longer leave a real `orders` row with zero `order_items` ("ghost order").
+- **Concurrency:** the function's first statement, `SELECT user_id, converted_order_id FROM carts WHERE id = p_cart_id FOR UPDATE`, is the actual race-condition guard — two checkout requests for the same customer arriving nearly simultaneously both call this function for the same cart; whichever acquires the row lock first proceeds, the second blocks until the first commits, then sees the cart already converted and returns the existing order instead of racing to insert a duplicate. Standard Postgres row-locking semantics, not a custom mutex or client-side debounce.
+- **Idempotency** reuses `carts.converted_order_id` (already added Sprint 8.0) rather than a new column or client-generated token.
+- **Security:** `SECURITY INVOKER` (confirmed via `pg_proc.prosecdef = false` post-deploy) — unlike the Sprint 8.0 webhook functions' `SECURITY DEFINER`, the caller here is the authenticated customer's own session, so RLS applies to every statement inside the function exactly as it would to separate calls; no explicit `auth.uid()` check needed in the function body since RLS already resolves a foreign `cart_id` to zero rows.
+- All business logic (validation, pricing, snapshot-building) stays in TypeScript, per explicit instruction — the function does only the final write. `createOrder()`'s public contract is unchanged.
+- Verified live: a normal order placed successfully through the new path (`HN-20260716-0009`), reading back correctly. The concurrency guarantee itself was verified by code review and Postgres's standard `FOR UPDATE` semantics, not a live concurrent-write test against the shared database (deliberately not attempted — would require writing fabricated orders into real project data outside the app layer).
 
 ---
 
 ## Previous Sprint
+
+**Sprint 8.1 — Checkout UI & Flow Hardening** ✅ COMPLETE
+
+Visual step indicator (`CheckoutSteps.tsx`, guidance only, no navigation added), a `CheckoutClient`-local hydration guard (`useCartStore.persist.hasHydrated()`/`onFinishHydration()`, `store.ts` untouched) via `CheckoutSkeleton.tsx`, server-side Zod validation on `createOrder()` with `shippingMethodId`'s enum derived from `SHIPPING_OPTIONS` at runtime, per-section inline validation hints, and loading-state polish. See full detail in the Completed Work table below.
+
+---
+
+## Earlier Sprint Detail
 
 **Sprint 8.0 — Checkout Architecture Review & Implementation** ✅ COMPLETE (Milestone 2: First Sale)
 
@@ -103,6 +112,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint 7.2 | **Cart & Session Continuity** — `carts` + `cart_items` tables, normalized, structurally parallel to `orders`/`order_items`, server-persisted for authenticated users only (guests stay client-only). No price/name snapshot on `cart_items` — reflects live product data. `cart_items.source` prepared for future `'ai'`/`'partner'` attribution (unconstrained text, not a `CHECK` enum, so no migration needed to introduce a new source later). Migration `20260714000001_cart_schema.sql`, applied to the linked project. RLS matches the `addresses`/`wishlists` `auth.uid()`-owned-row pattern. See ADR-021. **Application layer**: `src/app/cart/actions.ts` (add/update/remove/clear/merge/fetch Server Actions), `src/lib/supabase/queries/cart.ts`, and `src/lib/store.ts` extended with `userId`/`setUserId` so the existing Zustand cart merges a guest's local cart into the server on first login, hydrates from the server on return visits, and clears on sign-out — `CartDrawer.tsx`/`src/app/cart/page.tsx` unchanged. Also includes the post-7.1 Navbar UX integration (My Account/Addresses/Orders/Wishlist links). |
 | Sprint 8.0 | **Checkout (Milestone 2: First Sale)** — `products.sku`, `orders.shipping_method`, `carts.converted_order_id`, and the first-ever `orders`/`order_items` INSERT RLS policies (migration `20260715000001_checkout_write_access.sql`); two `SECURITY DEFINER` RPC functions so Stripe's webhook can write to `orders` with no service-role key (migration `20260715000002_stripe_payment_functions.sql`). Guests browse the full checkout flow; `createOrder()` requires a session, identified inline (no `next=`-redirect-back). `src/app/checkout/{page.tsx,actions.ts}` + `src/components/checkout/*` (shipping/billing via reused `AddressForm`, static delivery options, order review, immutable `order_items.product_snapshot`). Provider-agnostic `src/lib/payments/` with Stripe as the only concrete provider (PayPal/Klarna/Apple Pay/Google Pay can be added behind the same boundary later); `/api/payments/stripe/intent`, `/api/webhooks/stripe`, `CheckoutPayment.tsx` gracefully degrade without configured Stripe keys. Order confirmation (`/order-confirmation/[orderNumber]`) and real order history (`/account/orders`, replacing the Sprint 7.1 placeholder). See ADR-022. |
 | Sprint 8.1 | **Checkout UI & Flow Hardening** — `CheckoutSteps.tsx` (visual step indicator, guidance only, no navigation added), a `CheckoutClient`-local hydration guard using Zustand's own `useCartStore.persist.hasHydrated()`/`onFinishHydration()` (no change to `store.ts`'s public API) plus a new `CheckoutSkeleton.tsx`, server-side Zod validation on `createOrder()` with `shippingMethodId`'s enum derived from `SHIPPING_OPTIONS` at runtime (never hand-typed, so it can't drift), per-section inline validation hints, and loading-state polish on `CheckoutPayment.tsx`/`CheckoutIdentify.tsx`. No new schema, no new Server Actions, no DAL changes. |
+| Sprint 8.2 | **Order Engine Hardening (Atomicity & Concurrency)** — `create_order_atomic()` Postgres function (migration `20260716000001_order_engine_atomic.sql`, `SECURITY INVOKER`, ADR-023) replaces `createOrder()`'s three sequential calls with one transactional write; a `SELECT ... FOR UPDATE` lock on the target cart prevents two near-simultaneous checkout requests for the same customer from racing, and reusing `carts.converted_order_id` makes a resubmission idempotent. Business logic (validation, pricing, snapshot-building) stays in TypeScript — the function does only the final write. `createOrder()`'s public contract, `CheckoutClient.tsx`, and the DAL are all unchanged. |
 
 ---
 
@@ -110,7 +120,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 
 | Sprint | Goal |
 |---|---|
-| Sprint 8.2 | Payment Activation & Order Notifications — configure Stripe keys and verify a real test-mode charge end-to-end (the integration is fully coded, see Sprint 8.0 above), order confirmation email (Resend), tax calculation (currently hardcoded to 0), coupon redemption UI at checkout (`coupons`/`coupon_redemptions` tables already exist) |
+| Sprint 8.3 | Payment Activation & Order Notifications — configure Stripe keys and verify a real test-mode charge end-to-end (the integration is fully coded, see Sprint 8.0 above), order confirmation email (Resend), tax calculation (currently hardcoded to 0), coupon redemption UI at checkout (`coupons`/`coupon_redemptions` tables already exist) |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
 
 **Do NOT implement** Sprint 7.2's application layer, Stripe, or AI search until the relevant sprint begins.

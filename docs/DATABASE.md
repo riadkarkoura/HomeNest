@@ -1596,6 +1596,17 @@ Action:
   RETURN NEW;
 ```
 
+### RPC Functions (called directly via `.rpc()`, not triggers)
+
+These are invoked explicitly from application code rather than firing automatically — documented here since they're still part of this schema's write surface.
+
+**`create_order_atomic(...)`** — migration `20260716000001` (Sprint 8.2, ADR-023). `SECURITY INVOKER` (confirmed: `prosecdef = false`) — runs as the calling `authenticated` role, so RLS on `carts`/`orders`/`order_items` applies to every statement inside it exactly as it would to separate calls. Replaces what used to be three sequential calls from `createOrder()` (`src/app/checkout/actions.ts`) with one atomic write:
+1. `SELECT ... FOR UPDATE` locks the target `carts` row for the transaction's duration — this is what makes the function safe under real concurrency, not just sequential resubmission (see ADR-023 for the full race-condition walkthrough).
+2. If `converted_order_id` is already set on that cart, returns the existing order (idempotent replay) — no new rows written.
+3. Otherwise inserts `orders`, inserts `order_items`, and sets the cart's `converted_order_id`, all in one implicit transaction — a failure partway through rolls back everything already done in the call, so a real order row with zero line items ("ghost order") can no longer occur.
+
+**`record_stripe_payment_intent(order_id, payment_intent_id)`** and **`apply_stripe_payment_result(payment_intent_id, status, payment_status)`** — migration `20260715000002` (Sprint 8.0, ADR-022 addendum). Both `SECURITY DEFINER`, covering the one part of checkout with no end-user session to attach RLS to (Stripe's webhook) — see ADR-022 for the full reasoning. `record_stripe_payment_intent` re-checks `auth.uid() = orders.user_id` internally since `SECURITY DEFINER` bypasses RLS; `apply_stripe_payment_result` is called only after `/api/webhooks/stripe` verifies Stripe's HMAC signature, which is the actual authorization boundary for that one.
+
 ---
 
 ## 21. Relationships Reference
@@ -1810,5 +1821,5 @@ Tables must be created in dependency order to satisfy foreign key constraints:
 ---
 
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-15 — added `products.sku`, `orders.shipping_method`, `carts.converted_order_id`, and orders/order_items INSERT RLS (Sprint 8.0, ADR-022)*
+*Last updated: 2026-07-16 — added `create_order_atomic()` RPC function and documented the previously-undocumented `record_stripe_payment_intent()`/`apply_stripe_payment_result()` functions (Sprint 8.2, ADR-023)*
 *Next review: before writing the first Supabase migration*

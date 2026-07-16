@@ -379,5 +379,30 @@ The number **7.1 is deliberately reused**: it already names the shipped Product 
 
 ---
 
+## ADR-023 — Sprint 8.2 Order Engine: atomic, idempotent order creation via `create_order_atomic`
+**Date:** 2026-07-16
+**Status:** Accepted
+
+**Decision:** Replace `createOrder()`'s three sequential Supabase calls (insert `orders`, insert `order_items`, update `carts`) with one call to a new Postgres function, `create_order_atomic(...)` (migration `20260716000001_order_engine_atomic.sql`). All business logic — auth, Zod validation, fetching cart items and live product/variant data, stock/SKU checks, snapshot-building, price computation — stays in TypeScript exactly as before; the function's body is limited to the final write, kept deliberately small.
+
+**Transaction strategy:** A single Postgres function body runs inside one implicit transaction. If any statement inside raises, every statement that already ran in that call rolls back too — the previous three-call sequence could leave a real `orders` row with zero `order_items` if the second call failed after the first succeeded ("ghost order"); this is no longer possible.
+
+**Concurrency / race-condition prevention:** The function's first statement is `SELECT user_id, converted_order_id FROM carts WHERE id = p_cart_id FOR UPDATE`. `FOR UPDATE` takes a row-level lock on that one cart for the remainder of the transaction. If two checkout requests for the same authenticated customer arrive nearly simultaneously — a double-click, a slow-network retry, a second browser tab — both ultimately call this same function for the same `cart_id`. Whichever request's transaction acquires the lock first proceeds normally (checks `converted_order_id`, finds it `NULL`, inserts `orders`/`order_items`, sets `converted_order_id`, commits, releasing the lock). The second request's `SELECT ... FOR UPDATE` blocks — not fails, not races — until the first transaction commits. Once unblocked, it re-reads the now-current row, sees `converted_order_id` already set, and returns the existing order instead of inserting a second one. Postgres's MVCC + row locking guarantees this ordering; no application-level mutex, advisory lock, or client-side debounce is relied upon for correctness (the existing client-side `placing` state in `CheckoutClient` remains a UX nicety, not the safety mechanism).
+
+**Idempotency strategy:** Reuses `carts.converted_order_id` (added Sprint 8.0, ADR-022) rather than introducing a new column or a client-generated idempotency key. A cart can only ever be converted once; checking that column under the same lock that protects the write is sufficient for the realistic failure mode here (the same cart submitted more than once) — a client-side idempotency token was considered and rejected as solving a problem this schema doesn't have.
+
+**Security:** Unlike the Sprint 8.0 Stripe webhook functions (`SECURITY DEFINER`, because that caller has no session at all), `create_order_atomic` is `SECURITY INVOKER` (confirmed via `pg_proc.prosecdef = false` after deployment) — the caller here is the authenticated customer's own session, so RLS on `carts`/`orders`/`order_items` applies to every statement inside the function exactly as it would to separate calls. No `auth.uid()` check is written explicitly in the function body: a `p_cart_id` belonging to a different user resolves to zero rows under `carts_own_all`'s RLS policy, which the function treats as "cart not found" — RLS is doing the same job an explicit check would, without duplicating it.
+
+**Reason:** The Sprint 8.0 architecture review named this exact gap as an accepted risk ("Cart-to-order race... recommend the same posture here: make cart-to-order conversion idempotent... rather than adding a DB transaction preemptively, and re-verify this assumption during implementation") — Sprint 8.2 is that re-verification, and closes the gap now that it's explicitly in scope.
+
+**Consequence:** `createOrder()`'s public contract (`CreateOrderInput` → `CreateOrderResult`) is completely unchanged — no component, Server Action signature, or DAL query needed to change. Verified live: a normal order placed successfully through the new path (`HN-20260716-0009`) with identical behavior to before. A live two-concurrent-request test against the shared linked database was considered and deliberately not performed, since it would require writing fabricated test orders directly into real, shared project data outside the application layer — correctness here rests on Postgres's standard, well-established `SELECT ... FOR UPDATE` semantics (a textbook pattern, not a novel one) plus the successful single-order verification, not on an empirical race reproduction.
+
+**Alternatives considered:**
+- Client-side debounce/disable only (already exists as `placing` state) — rejected as the sole safety mechanism; it protects against accidental double-clicks in the UI but does nothing for a second tab, a replayed request, or a genuine network-level retry.
+- A client-generated idempotency key column — rejected as unnecessary; `carts.converted_order_id` already uniquely identifies "has this cart been converted," which is the only scenario that actually needs protecting against.
+- Moving all business logic (stock checks, snapshot-building, pricing) into the `plpgsql` function itself — rejected to keep the function's surface area minimal per explicit instruction; this logic is easier to read, test, and change in TypeScript.
+
+---
+
 *Document maintained by: Lead Product Engineer*
-*Last updated: 2026-07-15*
+*Last updated: 2026-07-16*

@@ -261,43 +261,33 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const discount = 0;
     const total = subtotal + shippingCost + tax - discount;
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        user_id: user.id,
-        status: "pending",
-        payment_status: "unpaid",
-        fulfillment_status: "unfulfilled",
-        subtotal,
-        shipping_cost: shippingCost,
-        tax,
-        discount,
-        total,
-        currency: "USD",
-        payment_provider: "stripe",
-        shipping_method: shippingOption.id,
-        shipping_address_id: parsed.data.shippingAddressId,
-        shipping_address_snapshot: toAddressSnapshot(shippingAddress),
-        billing_address_snapshot: billingSnapshot,
-        customer_notes: parsed.data.customerNotes ?? null,
-      })
-      .select("id, order_number")
-      .single();
+    // Single atomic, idempotent write (Sprint 8.2, ADR-023) -- replaces what
+    // used to be three separate insert/insert/update calls. If this cart was
+    // already converted (a resubmission, a double-click, or a genuine
+    // concurrent request), the function returns the existing order instead
+    // of creating a duplicate; otherwise it inserts orders + order_items and
+    // converts the cart, all inside one transaction, so a mid-sequence
+    // failure can never leave a "ghost order" with zero line items behind.
+    const { data: result, error: rpcError } = await supabase.rpc("create_order_atomic", {
+      p_cart_id: cartId,
+      p_subtotal: subtotal,
+      p_shipping_cost: shippingCost,
+      p_tax: tax,
+      p_discount: discount,
+      p_total: total,
+      p_currency: "USD",
+      p_payment_provider: "stripe",
+      p_shipping_method: shippingOption.id,
+      p_shipping_address_id: parsed.data.shippingAddressId,
+      p_shipping_address_snapshot: toAddressSnapshot(shippingAddress),
+      p_billing_address_snapshot: billingSnapshot,
+      p_customer_notes: parsed.data.customerNotes ?? null,
+      p_order_items: orderItems,
+    });
 
-    if (orderError || !order) throw orderError ?? new Error("Failed to create order");
+    if (rpcError || !result) throw rpcError ?? new Error("Failed to create order");
 
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(orderItems.map((item) => ({ ...item, order_id: order.id })));
-
-    if (itemsError) throw itemsError;
-
-    await supabase
-      .from("carts")
-      .update({ status: "converted", converted_order_id: order.id })
-      .eq("id", cartId);
-
-    return { ok: true, orderNumber: order.order_number };
+    return { ok: true, orderNumber: (result as { order_number: string }).order_number };
   } catch (err) {
     console.error("[createOrder]", err);
     return { ok: false, error: "Something went wrong placing your order. Please try again." };

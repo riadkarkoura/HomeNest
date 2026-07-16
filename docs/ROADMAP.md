@@ -21,7 +21,7 @@
 
 **Version:** 0.1.0  
 **Status:** Phase 0 — Frontend Foundation complete; Phase 1 (Backend) in progress  
-**Date:** 2026-07-15
+**Date:** 2026-07-16
 
 ### What's live
 
@@ -39,7 +39,7 @@
 - **Customer authentication** — email/password register/login, Google OAuth, password reset, session-aware Navbar, protected `/account/*` (Sprint 7.0; `/checkout`'s gate was later relaxed for guests in Sprint 8.0 — see below)
 - **Customer Account hub** at `/account` — Profile, Addresses (full CRUD), Orders (real data) and Wishlist placeholder, designed to scale to Security/Invoices/Home Projects/Service Bookings/Home Documents/Warranty Files without a redesign (Sprint 7.1, Orders wired to real data in Sprint 8.0)
 - **Cart & Session Continuity** — Zustand + localStorage cart for guests, automatically merged into a server-persisted `carts`/`cart_items` cart on login and kept continuously synced for authenticated users across devices (Sprint 7.2, ADR-021)
-- **Checkout & Orders** — full guest-accessible checkout flow at `/checkout` (shipping/billing address, delivery options, order review), inline sign-in/registration gate before an order is created, real order placement into `orders`/`order_items` with immutable product snapshots (name/SKU/image/variant), order confirmation page, real order history and detail at `/account/orders` (Sprint 8.0, ADR-022) — hardened with a visual step indicator, server-side input validation, and a cart-hydration guard (Sprint 8.1)
+- **Checkout & Orders** — full guest-accessible checkout flow at `/checkout` (shipping/billing address, delivery options, order review), inline sign-in/registration gate before an order is created, real order placement into `orders`/`order_items` with immutable product snapshots (name/SKU/image/variant), order confirmation page, real order history and detail at `/account/orders` (Sprint 8.0, ADR-022) — hardened with a visual step indicator, server-side input validation, and a cart-hydration guard (Sprint 8.1), and with an atomic, race-safe, idempotent order-creation write path (Sprint 8.2, ADR-023)
 - Responsive design (mobile-first)
 - Framer Motion animations throughout
 
@@ -271,11 +271,24 @@ A planning-first pass (no code until approved) that hardens the UI/UX of the che
 - **Loading polish:** `CheckoutPayment.tsx`'s bare loading text replaced with a skeleton matching this app's existing `animate-pulse` convention (`ProductsTable.tsx`'s `SkeletonRow`); `CheckoutIdentify.tsx`'s sign-in/register toggle disabled while a submission is pending.
 - Verified live: step indicator accuracy at multiple states, per-section hints appear/clear correctly, a full order placed successfully post-Zod-validation with no regression, mobile pass at 375×812 (step indicator wraps cleanly, no horizontal overflow).
 
+### Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency)
+**Status:** ✅ Complete
+
+A planning-first pass hardening the order-creation write path itself — no new UI, no payment activation. **Naming note:** reuses the number the Sprint 8.1 entry above had provisionally reserved for "Payment Activation & Order Notifications"; that placeholder was never approved as fixed, so it's renumbered to Sprint 8.3 below.
+
+- **Atomic write** (migration `20260716000001_order_engine_atomic.sql`, ADR-023): `create_order_atomic(...)` replaces `createOrder()`'s three sequential calls (insert `orders`, insert `order_items`, update `carts`) with one Postgres function running inside a single implicit transaction — a mid-sequence failure can no longer leave a real order row with zero line items ("ghost order").
+- **Concurrency:** the function's first statement, `SELECT ... FOR UPDATE` on the target cart row, is what actually prevents a race — if two checkout requests for the same customer arrive nearly simultaneously, the second blocks on that lock until the first's transaction commits, then sees the cart already converted and returns the existing order instead of racing to insert a duplicate. Standard Postgres row-locking semantics, not a custom mutex.
+- **Idempotency:** reuses `carts.converted_order_id` (already added in Sprint 8.0) rather than a new column or client-generated token — a resubmission against an already-converted cart returns the existing order.
+- **Security:** `SECURITY INVOKER` (confirmed via `prosecdef = false` post-deploy), unlike the Sprint 8.0 webhook functions' `SECURITY DEFINER` — the caller here is the authenticated customer's own session, so RLS on `carts`/`orders`/`order_items` applies to every statement inside the function exactly as it would to separate calls.
+- All business logic (validation, pricing, snapshot-building) stays in TypeScript, per explicit instruction — the function's body is limited to the final write.
+- `createOrder()`'s public contract is unchanged — no component, Server Action signature, or DAL query needed to change.
+- Verified live: a normal order placed successfully through the new path (`HN-20260716-0009`), reading back correctly at `/account/orders`. A live two-concurrent-request test against the shared linked database was deliberately not performed (would require writing fabricated test orders into real project data outside the application layer); the concurrency guarantee rests on Postgres's standard `SELECT ... FOR UPDATE` semantics plus code review, not an empirical race reproduction.
+
 ## 3. Upcoming Sprints
 
-**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0, 7.1, and 7.2 are all complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reused a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section. Sprint 8.0 (Checkout) and Sprint 8.1 (Checkout UI & Flow Hardening) are also complete (see Sprint History above); the original single "Sprint 8 — Payments & Orders" sketch below is superseded by them, renumbered to Sprint 8.2 to avoid colliding with 8.1's actual (UI/flow) scope.
+**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0, 7.1, and 7.2 are all complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reused a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section. Sprint 8.0 (Checkout), Sprint 8.1 (Checkout UI & Flow Hardening), and Sprint 8.2 (Order Engine Hardening) are also complete (see Sprint History above); the original single "Sprint 8 — Payments & Orders" sketch below is superseded by them, renumbered to Sprint 8.3 to avoid colliding with 8.2's actual scope.
 
-### Sprint 8.2 — Payment Activation & Order Notifications (proposed, not scoped)
+### Sprint 8.3 — Payment Activation & Order Notifications (proposed, not scoped)
 **Goal:** Turn the already-built Stripe integration into real, working payments once keys are configured, and notify customers by email
 
 **Tasks:**
