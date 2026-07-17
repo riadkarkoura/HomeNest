@@ -406,5 +406,35 @@ The number **7.1 is deliberately reused**: it already names the shipped Product 
 
 ---
 
+## ADR-024 — Sprint 8.3 Stripe payment activation: Payment Element over Checkout, webhook ordering guard, payment-intent reuse
+**Date:** 2026-07-16
+**Status:** Accepted
+
+**Decision:** Four related changes, activating the Stripe integration Sprint 8.0 already built:
+
+1. **Stripe Payment Element (Elements), not Stripe Checkout** — ratifying the choice already implemented in Sprint 8.0, not a new build. Checkout redirects the customer to a Stripe-hosted page; Elements keeps them on `/checkout` throughout, consistent with the on-site "Cart → Checkout → Confirmation" journey this app has been built around since Sprint 8.0/8.1. Checkout would have been less code, at the cost of exactly the continuity this project has repeatedly prioritized.
+2. **Card-only PaymentIntents** (`src/lib/payments/stripe.ts`): `payment_method_types: ["card"]` replaces `automatic_payment_methods: { enabled: true }`. `automatic_payment_methods` would let Stripe surface redirect-based methods (e.g. iDEAL) that the checkout flow has no return-handling for yet. Scoped deliberately to keep this sprint focused on successful card payments, per explicit instruction — not a second provider, a Stripe API option on the same integration.
+3. **Webhook ordering guard** (migration `20260716000003_stripe_webhook_ordering_guard.sql`): `apply_stripe_payment_result()` now refuses to change `payment_status` once it's `'paid'` (`WHERE ... AND payment_status != 'paid'`). Stripe does not guarantee webhook delivery order and can redeliver events; without this, a stale `payment_intent.payment_failed` arriving after `payment_intent.succeeded` for the same intent could downgrade an already-paid order back to failed. Same function signature, same `SECURITY DEFINER` posture, same grants — only the body changed.
+4. **PaymentIntent reuse** (`/api/payments/stripe/intent/route.ts`): before creating a new intent, the route now checks `orders.stripe_payment_intent_id`; if the existing intent is still in a payable state (`requires_payment_method`/`requires_confirmation`/`requires_action`), its `client_secret` is reused instead of creating a second PaymentIntent for the same order. A `succeeded` intent short-circuits to the existing "already paid" error; anything else (canceled, processing) falls through to creating a fresh intent.
+
+**Reason:** The Sprint 8.3 architecture review found these as the only real gaps in an otherwise-correct, already-built integration: (1) the webhook had no protection against out-of-order/redelivered events corrupting an already-paid order, (2) the intent route was not idempotent per order — a reload before paying created an orphaned second PaymentIntent in Stripe every time, (3) `automatic_payment_methods` would silently expand scope into redirect-based methods this sprint isn't built to handle. None of these required restructuring the existing provider-agnostic layering (`src/lib/payments/index.ts` → `stripe.ts` → Route Handlers → the two RPC functions) — each is a small, contained fix at its existing layer.
+
+**Consequence:** `createOrder()`, the Order Engine (`create_order_atomic`), `CheckoutClient.tsx`, and the payment-provider abstraction are all completely unchanged — this ADR only touches the Stripe-specific modules and one existing function's body. Also see the addendum below for the failed-payment path, explicitly scoped as documentation-only this sprint.
+
+**Addendum — failed-payment path (documentation only, no new code this sprint):**
+- **Declined card** — already implemented: Stripe's Payment Element shows the decline inline; `payment_intent.payment_failed` fires the webhook, which now (with the ordering guard above) safely sets `status='cancelled'`/`payment_status='failed'`. The order remains visible in `/account/orders` regardless (order creation and payment are decoupled by design, ADR-022).
+- **Retry after a decline** — already implemented: Stripe's Payment Element lets the customer re-enter card details and re-confirm the same PaymentIntent natively; no application code needed.
+- **Retry via reload/reopening checkout** — implemented this sprint via the PaymentIntent-reuse fix above.
+- **Abandoned checkout and explicit cancellation** — **deferred, not implemented.** The webhook does not subscribe to `payment_intent.canceled`. Stripe automatically cancels an unconfirmed PaymentIntent after 24 hours by default, firing that event — today nothing listens for it, so the order simply stays `pending`/`unpaid` indefinitely with no automatic transition. Future scope: subscribe to `payment_intent.canceled` (maps to the same `status='cancelled'`/`payment_status='failed'` transition, no schema change needed) and/or a scheduled job to mark long-stale pending orders.
+- **Timeout** — **deferred, not implemented.** Server-side Stripe API timeouts during intent creation are already caught and surfaced as a friendly error (`createStripePaymentIntent`'s existing `try/catch`). Client-side, `stripe.confirmPayment()` has no explicit timeout — if the network drops mid-confirmation, the UI can show "Processing…" indefinitely with no automatic recovery prompt. Future scope: a client-side timeout with a "try again" affordance.
+- **Automatic webhook retry** (Stripe's own infrastructure retrying a failed delivery) — implemented this sprint via the non-2xx-on-RPC-failure fix; this is what makes Stripe's existing retry mechanism actually usable rather than defeated by a false-positive 200.
+
+**Alternatives considered:**
+- Handling redirect-based payment methods now instead of restricting to card-only (rejected — the checkout flow has no return-from-redirect handling built, and adding it now would expand this sprint's scope beyond "successful card payments," which was explicit).
+- A dedicated Stripe-event-id deduplication table for webhook idempotency (rejected as premature — with no side effects today beyond idempotent status writes, the ordering guard alone is sufficient; revisit only once a side-effecting webhook consumer, e.g. a future confirmation email, is actually built).
+- Subscribing to `payment_intent.canceled` now (rejected — genuinely low-risk to defer, since an unhandled cancellation only leaves an order `pending`/`unpaid`, the same state it already starts in; no data corruption risk, unlike the ordering-guard fix which was addressing an active downgrade risk).
+
+---
+
 *Document maintained by: Lead Product Engineer*
 *Last updated: 2026-07-16*

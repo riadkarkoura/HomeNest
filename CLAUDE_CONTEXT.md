@@ -28,16 +28,33 @@ HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce
 
 **Version:** 0.1.0  
 **Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency); Patch 8.2.1 (`cart_items` NULL-variant race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) applied on top.  
-**Date of last update:** 2026-07-16
+**Last sprint completed:** Sprint 8.3 — Stripe Payment Architecture (hardening: card-only PaymentIntents, webhook ordering guard, PaymentIntent reuse, non-2xx-on-failure); Sprint 8.2 (Order Engine Hardening) and Patches 8.2.1/8.2.2 precede it.  
+**Date of last update:** 2026-07-17
 
 ---
 
 ## Current Sprint
 
-**Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency)** ✅ COMPLETE
+**Sprint 8.3 — Stripe Payment Architecture (Hardening)** ✅ COMPLETE
 
-Planning-first (no code until approved), hardening the order-creation write path itself — no new UI, no payment activation. **Naming note:** reuses the number the Sprint 8.1 entry had provisionally reserved for "Payment Activation & Order Notifications"; that placeholder was never approved as fixed, so it's renumbered to Sprint 8.3 in `docs/ROADMAP.md`.
+Architecture-planning-first (17-section plan, no code until approved), then implemented. Scope was explicitly **payment architecture hardening for successful card payments only** — not activating real Stripe keys, not adding other payment providers, not order confirmation email/tax/coupons (all moved to Sprint 8.4). Re-reading the already-built Sprint 8.0 Stripe code fresh surfaced three genuine, previously-unnoticed gaps, all fixed this sprint:
+
+- **Card-only PaymentIntents:** `src/lib/payments/stripe.ts`'s `createStripePaymentIntent()` now passes `payment_method_types: ["card"]` instead of `automatic_payment_methods: { enabled: true }` — keeps the sprint's stated focus on card payments rather than silently picking up redirect-based methods (e.g. iDEAL) the checkout flow has no return-handling for.
+- **PaymentIntent reuse (idempotency):** `/api/payments/stripe/intent/route.ts` now selects the order's existing `stripe_payment_intent_id` first; if it's still in a reusable state (`requires_payment_method`/`requires_confirmation`/`requires_action`) it returns that intent's `client_secret` instead of creating a new orphaned PaymentIntent every time the route is hit for the same order, and returns `409` if the order is already `succeeded`. New exported `retrieveStripePaymentIntent()` in `stripe.ts` backs this.
+- **Webhook ordering guard** (migration `20260716000003_stripe_webhook_ordering_guard.sql`, ADR-024): `apply_stripe_payment_result()`'s `UPDATE` now includes `AND payment_status != 'paid'` — Stripe does not guarantee webhook delivery order or exactly-once delivery, so a stale `payment_intent.payment_failed` arriving after `succeeded` for the same intent could previously have downgraded an already-paid order. Confirmed via a live, read-only query against `pg_proc` post-deploy.
+- **Webhook failures now return non-2xx:** both `payment_intent.succeeded` and `payment_intent.payment_failed` branches in `src/app/api/webhooks/stripe/route.ts` return `500` (not a false-positive `200`) when the RPC call errors — this is what makes Stripe's own retry/backoff mechanism actually usable instead of silently dropping a failed update.
+- **Stripe Elements/Payment Element ratified over Stripe Checkout** (ADR-024) — confirms the choice already implemented in Sprint 8.0 was correct, not a new build; keeps the customer on `/checkout` rather than redirecting to a Stripe-hosted page.
+- **Failed-payment path documented, not implemented** (`TESTING.md` §6, per explicit additional requirement): declined card and both retry paths (reload, same-session) are implemented and table-verified; abandoned checkout, explicit cancellation (no `payment_intent.canceled` subscription), and client-side payment timeout handling are deliberately deferred to Sprint 8.4 — documentation only, no code, keeping this sprint's scope to successful card payments as instructed.
+- `createOrder()`, `create_order_atomic()`, `CheckoutClient.tsx`, and the provider-agnostic payment boundary (`src/lib/payments/`) are all unchanged — no other payment provider was introduced, no Order Engine coupling to Stripe.
+- Verified: production build clean. Live end-to-end charge verification remains blocked on Stripe test-mode keys not being configured in this environment — external dependency, same category as Sprint 7.0's Google OAuth, carried forward to Sprint 8.4.
+
+---
+
+## Previous Sprint
+
+**Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency)** ✅ COMPLETE (plus Patch 8.2.1, Patch 8.2.2)
+
+Planning-first (no code until approved), hardening the order-creation write path itself — no new UI, no payment activation.
 
 - **Atomic write** (migration `20260716000001_order_engine_atomic.sql`, ADR-023) — `create_order_atomic(...)` replaces `createOrder()`'s three sequential calls (insert `orders`, insert `order_items`, update `carts`) with one Postgres function running inside a single implicit transaction. A mid-sequence failure can no longer leave a real `orders` row with zero `order_items` ("ghost order").
 - **Concurrency:** the function's first statement, `SELECT user_id, converted_order_id FROM carts WHERE id = p_cart_id FOR UPDATE`, is the actual race-condition guard — two checkout requests for the same customer arriving nearly simultaneously both call this function for the same cart; whichever acquires the row lock first proceeds, the second blocks until the first commits, then sees the cart already converted and returns the existing order instead of racing to insert a duplicate. Standard Postgres row-locking semantics, not a custom mutex or client-side debounce.
@@ -52,7 +69,7 @@ Planning-first (no code until approved), hardening the order-creation write path
 
 ---
 
-## Previous Sprint
+## Earlier Sprint Detail
 
 **Sprint 8.1 — Checkout UI & Flow Hardening** ✅ COMPLETE
 
@@ -117,6 +134,7 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint 8.0 | **Checkout (Milestone 2: First Sale)** — `products.sku`, `orders.shipping_method`, `carts.converted_order_id`, and the first-ever `orders`/`order_items` INSERT RLS policies (migration `20260715000001_checkout_write_access.sql`); two `SECURITY DEFINER` RPC functions so Stripe's webhook can write to `orders` with no service-role key (migration `20260715000002_stripe_payment_functions.sql`). Guests browse the full checkout flow; `createOrder()` requires a session, identified inline (no `next=`-redirect-back). `src/app/checkout/{page.tsx,actions.ts}` + `src/components/checkout/*` (shipping/billing via reused `AddressForm`, static delivery options, order review, immutable `order_items.product_snapshot`). Provider-agnostic `src/lib/payments/` with Stripe as the only concrete provider (PayPal/Klarna/Apple Pay/Google Pay can be added behind the same boundary later); `/api/payments/stripe/intent`, `/api/webhooks/stripe`, `CheckoutPayment.tsx` gracefully degrade without configured Stripe keys. Order confirmation (`/order-confirmation/[orderNumber]`) and real order history (`/account/orders`, replacing the Sprint 7.1 placeholder). See ADR-022. |
 | Sprint 8.1 | **Checkout UI & Flow Hardening** — `CheckoutSteps.tsx` (visual step indicator, guidance only, no navigation added), a `CheckoutClient`-local hydration guard using Zustand's own `useCartStore.persist.hasHydrated()`/`onFinishHydration()` (no change to `store.ts`'s public API) plus a new `CheckoutSkeleton.tsx`, server-side Zod validation on `createOrder()` with `shippingMethodId`'s enum derived from `SHIPPING_OPTIONS` at runtime (never hand-typed, so it can't drift), per-section inline validation hints, and loading-state polish on `CheckoutPayment.tsx`/`CheckoutIdentify.tsx`. No new schema, no new Server Actions, no DAL changes. |
 | Sprint 8.2 | **Order Engine Hardening (Atomicity & Concurrency)** — `create_order_atomic()` Postgres function (migration `20260716000001_order_engine_atomic.sql`, `SECURITY INVOKER`, ADR-023) replaces `createOrder()`'s three sequential calls with one transactional write; a `SELECT ... FOR UPDATE` lock on the target cart prevents two near-simultaneous checkout requests for the same customer from racing, and reusing `carts.converted_order_id` makes a resubmission idempotent. Business logic (validation, pricing, snapshot-building) stays in TypeScript — the function does only the final write. `createOrder()`'s public contract, `CheckoutClient.tsx`, and the DAL are all unchanged. |
+| Sprint 8.3 | **Stripe Payment Architecture (Hardening, ADR-024)** — card-only PaymentIntents (`payment_method_types: ["card"]`), PaymentIntent reuse/idempotency in `/api/payments/stripe/intent`, a webhook ordering guard (`apply_stripe_payment_result()` now refuses to downgrade an already-`paid` order, migration `20260716000003_stripe_webhook_ordering_guard.sql`), and non-2xx responses from `/api/webhooks/stripe` on RPC failure so Stripe's retry mechanism actually engages. Stripe Elements/Payment Element ratified over Stripe Checkout. Failed-payment path (declined card, retries, out-of-order events) documented in `TESTING.md` §6; abandoned checkout/cancellation/timeout intentionally deferred to Sprint 8.4. No other payment provider added, Order Engine untouched. |
 
 ---
 
@@ -124,10 +142,10 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 
 | Sprint | Goal |
 |---|---|
-| Sprint 8.3 | Payment Activation & Order Notifications — configure Stripe keys and verify a real test-mode charge end-to-end (the integration is fully coded, see Sprint 8.0 above), order confirmation email (Resend), tax calculation (currently hardcoded to 0), coupon redemption UI at checkout (`coupons`/`coupon_redemptions` tables already exist) |
+| Sprint 8.4 | Payment Activation & Order Notifications — configure real Stripe keys and verify a live test-mode charge end-to-end (the integration is fully coded and hardened, see Sprint 8.3 above), order confirmation email (Resend), tax calculation (currently hardcoded to 0), coupon redemption UI at checkout (`coupons`/`coupon_redemptions` tables already exist), plus the Sprint 8.3 deferred failed-payment items: `payment_intent.canceled` webhook subscription and client-side payment timeout handling |
 | Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
 
-**Do NOT implement** Sprint 7.2's application layer, Stripe, or AI search until the relevant sprint begins.
+**Do NOT implement** Sprint 8.4's Stripe activation or AI search until the relevant sprint begins.
 
 ---
 
@@ -311,14 +329,14 @@ src/
 
 ## Next Priority
 
-**Sprint 7.0 (Authentication Foundation) and Sprint 7.1 (User Area) are both complete.** Customer register/login (email+password and Google OAuth), password reset, session-aware Navbar, and the `/account` hub (Profile, Addresses, Orders/Wishlist placeholders) are all real and verified live. Sprint 7.2's schema (`carts`/`cart_items`, ADR-021) is also done and applied. What's left, in rough priority order:
+**Sprints 7.0 through 8.3 are all complete.** Customer auth, the `/account` hub, cart/session continuity, checkout, the Order Engine (atomic + concurrency-safe), and Stripe payment architecture hardening are all real, live, and verified. What's left, in rough priority order:
 
 - A dedicated Media Library so a previously-uploaded image can be reused across products, rather than uploaded fresh each time (not yet scheduled to a sprint)
-- **Sprint 7.2 — Cart & Session Continuity, application layer**: merge-on-login flow, cart Server Actions, Zustand/UI changes to read from the server cart for authenticated users. Not yet scoped with an implementation plan.
-- **Sprint 8 — Payments & Orders**: will wire real data into the existing `/account/orders` placeholder.
+- **Sprint 8.4 — Payment Activation & Order Notifications**: configure real Stripe keys, verify a live test-mode charge end-to-end, order confirmation email, tax calculation, coupon redemption UI, plus Sprint 8.3's deferred failed-payment items (`payment_intent.canceled`, client-side timeout). Not yet scoped with an implementation plan.
+- **Sprint 9 — AI Smart Search.**
 
-Do NOT start Sprint 7.2's application-layer work without explicit user instruction.
+Do NOT start Sprint 8.4's work without explicit user instruction.
 
 ---
 
-*Last updated: 2026-07-14*
+*Last updated: 2026-07-17*

@@ -29,7 +29,15 @@ export async function POST(request: Request) {
       p_status: "processing",
       p_payment_status: "paid",
     });
-    if (error) console.error("[stripe webhook] apply_stripe_payment_result failed", error);
+    // Non-2xx on failure (Sprint 8.3, ADR-024) -- a 200 here tells Stripe
+    // the event was handled, and Stripe will never retry it. Swallowing a
+    // transient DB error and still returning 200 would permanently miss
+    // updating this order with no safety net. Returning 500 lets Stripe's
+    // own retry/backoff actually engage.
+    if (error) {
+      console.error("[stripe webhook] apply_stripe_payment_result failed", error);
+      return NextResponse.json({ error: "Failed to record payment result." }, { status: 500 });
+    }
   } else if (event.type === "payment_intent.payment_failed") {
     const intent = event.data.object as Stripe.PaymentIntent;
     const { error } = await supabase.rpc("apply_stripe_payment_result", {
@@ -37,7 +45,10 @@ export async function POST(request: Request) {
       p_status: "cancelled",
       p_payment_status: "failed",
     });
-    if (error) console.error("[stripe webhook] apply_stripe_payment_result failed", error);
+    if (error) {
+      console.error("[stripe webhook] apply_stripe_payment_result failed", error);
+      return NextResponse.json({ error: "Failed to record payment result." }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ received: true });

@@ -294,19 +294,34 @@ A pre-Sprint-8.3 architecture audit of the whole Commerce Layer found that `UNIQ
 
 The Navbar cart badge read `useCartStore`'s `totalItems()` with no hydration guard — `useCartStore.persist` (Zustand's `persist` middleware) can't read `localStorage` during SSR, so the server-rendered HTML always showed `Cart, 0 items`; once the client rehydrated from `localStorage` a moment after React's hydration pass, it silently updated to the real count, producing a mismatch (e.g. "Cart, 0 items" vs. "Cart, 3 items"). Long-observed across earlier sprints but never formally fixed. Fixed with a local hydration guard in `src/components/layout/Navbar.tsx` — same pattern as `CheckoutClient`'s Sprint 8.1 guard, scoped entirely to Navbar, no changes to `useCartStore`'s public API, no changes to checkout. **A first attempt using the same lazy-`useState`-initializer form `CheckoutClient` uses broke `next build`** (`Cannot read properties of undefined (reading 'hasHydrated')` on `/cart` and `/account/addresses`'s static-prerender pass — `useCartStore.persist` isn't available in that build-time worker context, unlike a real request-time SSR pass) — fixed by initializing to a plain `false` literal and deferring every `useCartStore.persist` read into `useEffect`, which never runs during server/build-time rendering. Verified live: no hydration warning on a hard reload with items in the cart, badge settles to the correct count, `npm run build` passes including the two previously-crashing pages.
 
+### Sprint 8.3 — Stripe Payment Architecture Planning
+**Status:** ✅ Complete
+
+Payment architecture only, per explicit scope — order confirmation email, tax, and coupon redemption moved to Sprint 8.4 below (this sprint's placeholder had bundled them; the actual request was narrower).
+
+- **Stripe Payment Element ratified over Stripe Checkout** (ADR-024) — the choice already implemented in Sprint 8.0, not a new build; keeps the customer on `/checkout` throughout rather than redirecting to a Stripe-hosted page.
+- **Card-only PaymentIntents:** `payment_method_types: ["card"]` replaces `automatic_payment_methods: { enabled: true }` in `src/lib/payments/stripe.ts` — avoids silently expanding into redirect-based methods (e.g. iDEAL) the checkout flow has no return-handling for yet; deliberately keeps this sprint scoped to successful card payments.
+- **Webhook ordering guard** (migration `20260716000003_stripe_webhook_ordering_guard.sql`): `apply_stripe_payment_result()` now refuses to move `payment_status` away from `'paid'` — Stripe doesn't guarantee webhook delivery order and can redeliver events; without this, a stale `payment_intent.payment_failed` arriving after `succeeded` for the same intent could have downgraded an already-paid order.
+- **PaymentIntent reuse** (`/api/payments/stripe/intent/route.ts`): checks `orders.stripe_payment_intent_id` first and reuses the existing intent's `client_secret` if still payable, instead of creating an orphaned second PaymentIntent every time the route is called for the same order.
+- **Webhook failures now return a non-2xx status** instead of a false-positive `200` when `apply_stripe_payment_result()` errors — this is what makes Stripe's own retry/backoff mechanism actually usable.
+- **Failed-payment path documented, not implemented** (`TESTING.md` §6, ADR-024 addendum) — declined card and both retry paths are implemented; abandoned checkout, explicit cancellation, and client-side timeout are explicitly deferred (no `payment_intent.canceled` subscription yet, no cleanup job, no client-side confirmation timeout).
+- `createOrder()`, `create_order_atomic()`, `CheckoutClient.tsx`, and the provider-agnostic payment boundary are all unchanged — every fix landed inside the existing Stripe-specific modules or one existing function's body.
+- Verified: production build clean; end-to-end live-charge verification remains blocked on Stripe test-mode keys not being configured in this environment (external dependency, same category as Sprint 7.0's Google OAuth).
+
 ## 3. Upcoming Sprints
 
-**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0, 7.1, and 7.2 are all complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reused a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section. Sprint 8.0 (Checkout), Sprint 8.1 (Checkout UI & Flow Hardening), and Sprint 8.2 (Order Engine Hardening) are also complete (see Sprint History above); the original single "Sprint 8 — Payments & Orders" sketch below is superseded by them, renumbered to Sprint 8.3 to avoid colliding with 8.2's actual scope.
+**Note:** The originally-planned single "Sprint 7 — Full Authentication" was split into three sequentially-numbered sprints per explicit user instruction (2026-07-13) — see ADR-020. Sprints 7.0, 7.1, and 7.2 are all complete (see Sprint History above). Number 7.1 was intentionally reused: it also names the already-shipped Product Edit sprint above (2026-07-12); dates disambiguate which "Sprint 7.1" is meant. Sprint 7.2 (Cart & Session Continuity) similarly reused a number already associated with the still-pending bulk-actions proposal from ADR-019 — see ADR-020's Consequence section. Sprint 8.0 (Checkout), Sprint 8.1 (Checkout UI & Flow Hardening), Sprint 8.2 (Order Engine Hardening), and Sprint 8.3 (Stripe Payment Architecture) are all complete (see Sprint History above); the original single "Sprint 8 — Payments & Orders" sketch's remaining, unscoped pieces move to Sprint 8.4 below.
 
-### Sprint 8.3 — Payment Activation & Order Notifications (proposed, not scoped)
-**Goal:** Turn the already-built Stripe integration into real, working payments once keys are configured, and notify customers by email
+### Sprint 8.4 — Payment Activation & Order Notifications (proposed, not scoped)
+**Goal:** Configure real Stripe keys and verify a live charge; add the remaining commerce pieces Sprint 8.3 deliberately didn't cover
 
 **Tasks:**
 - [ ] Configure `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (external, `TESTING.md` §5)
-- [ ] Verify a real test-mode charge end-to-end (`payment_status` unpaid → paid via webhook)
+- [ ] Verify a real test-mode charge end-to-end (`payment_status` unpaid → paid via webhook), including the Sprint 8.3 fixes (intent reuse, ordering guard, retry behavior)
 - [ ] Order confirmation email via Resend
 - [ ] Tax calculation (currently hardcoded to 0)
 - [ ] Coupon redemption UI at checkout (tables already exist)
+- [ ] Consider: `payment_intent.canceled` webhook subscription and/or a stale-order cleanup job (Sprint 8.3's deferred failed-payment items, `TESTING.md` §6)
 
 ### Sprint 9 — AI Search
 **Goal:** Natural language product discovery powered by Claude

@@ -162,7 +162,31 @@ charge until someone with Stripe Dashboard access completes this one-time setup.
 
 ---
 
-## 6. Manual Verification Checklist
+## 6. Failed Payment Path (Sprint 8.3, ADR-024)
+
+Sprint 8.3 was scoped to **successful card payments**; the table below is explicit about which
+failure scenarios are actually implemented today versus deliberately deferred as documentation
+only. PaymentIntents are card-only this sprint (`payment_method_types: ["card"]`) — no redirect-
+based methods, and no additional payment providers.
+
+| Scenario | Status | Behavior |
+|---|---|---|
+| **Declined card** | ✅ Implemented | Stripe's Payment Element shows the decline inline. `payment_intent.payment_failed` fires the webhook, which sets `status='cancelled'`/`payment_status='failed'` via `apply_stripe_payment_result()` (now guarded against out-of-order delivery — see below). The order stays visible in `/account/orders` regardless, since order creation and payment are decoupled (ADR-022). |
+| **Retry after a decline** | ✅ Implemented | The Payment Element lets the customer re-enter card details and re-confirm the *same* PaymentIntent natively — no application code needed. |
+| **Retry via reload/reopening checkout** | ✅ Implemented | `/api/payments/stripe/intent` now checks `orders.stripe_payment_intent_id` first and reuses the existing PaymentIntent's `client_secret` if it's still in a payable state (`requires_payment_method`/`requires_confirmation`/`requires_action`), instead of creating a second, orphaned PaymentIntent for the same order every time the route is called. |
+| **Out-of-order / redelivered webhook events** | ✅ Implemented | `apply_stripe_payment_result()` refuses to move `payment_status` away from `'paid'` once set — a stale `payment_failed` arriving after `succeeded` for the same intent is now a no-op instead of a data-corrupting downgrade. |
+| **Automatic Stripe webhook retry** (Stripe's own infrastructure retrying a failed delivery to our endpoint) | ✅ Implemented | The webhook now returns a non-2xx status if `apply_stripe_payment_result()` itself errors, instead of a false-positive `200` that would have told Stripe the event was handled when it wasn't — this is what makes Stripe's existing retry/backoff actually usable. |
+| **Abandoned checkout** (customer never returns to complete payment) | ⚠️ Deferred, documented only | No cleanup job or expiration handling exists. Stripe auto-cancels an unconfirmed PaymentIntent after 24 hours by default, firing `payment_intent.canceled` — nothing subscribes to that event today, so the order simply stays `pending`/`unpaid` indefinitely. Future scope: subscribe to `payment_intent.canceled` (same `status`/`payment_status` transition already used for failures, no schema change) and/or a scheduled job to flag long-stale pending orders. |
+| **Explicitly canceled payment** (customer backs out mid-flow, or the intent is canceled directly) | ⚠️ Deferred, documented only | Same root cause as abandoned checkout — `payment_intent.canceled` isn't subscribed to. The order remains `pending`/`unpaid` with no automatic transition until that event is wired up. |
+| **Timeout** (network drop mid-confirmation) | ⚠️ Deferred, documented only | Server-side Stripe API timeouts during intent creation are already caught (`createStripePaymentIntent`'s `try/catch`) and surfaced as a friendly error. Client-side, `stripe.confirmPayment()` has no explicit timeout — if the network drops mid-request, the UI can show "Processing…" indefinitely with no automatic recovery prompt. Future scope: a client-side timeout with a "try again" affordance. |
+
+**Verification for the deferred items is not applicable this sprint** — there is intentionally no
+code to verify for abandoned checkout, explicit cancellation, or client-side timeout. Don't
+mistake the absence of handling for a bug when re-testing this area later; check this table first.
+
+---
+
+## 7. Manual Verification Checklist
 
 Run through this after any change touching auth, using the persistent test account from §1 for
 every item except Registration.
@@ -243,7 +267,7 @@ every item except Registration.
 
 ---
 
-## 7. Known Limitations
+## 8. Known Limitations
 
 - **Supabase's auth email rate limit is easy to exhaust during manual testing.** Budget
   registration attempts accordingly (see §1); don't burn them on repeated login/logout checks.

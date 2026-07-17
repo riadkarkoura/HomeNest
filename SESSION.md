@@ -1,8 +1,8 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 8.2 — Order Engine Hardening (Atomicity & Concurrency) — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
-8.0 (Milestone 2: First Sale), and 8.1 are also complete. Patch 8.2.1 (`cart_items` NULL-variant
+Sprint 8.3 — Stripe Payment Architecture (Hardening) — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
+8.0 (Milestone 2: First Sale), 8.1, and 8.2 are also complete. Patch 8.2.1 (`cart_items` NULL-variant
 race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) are also complete — see below.
 
 ## Last Completed
@@ -77,6 +77,19 @@ race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) are also complete �
   resubmission idempotent (returns the existing order instead of duplicating). All business logic
   (validation, pricing, snapshot-building) stays in TypeScript — the function does only the final
   write. `createOrder()`'s public contract is unchanged.
+- ✅ Stripe Payment Architecture hardening (Sprint 8.3, ADR-024): `payment_method_types: ["card"]`
+  replaces `automatic_payment_methods` (card-only, scope stays focused on successful card
+  payments); `/api/payments/stripe/intent` now reuses an order's existing `stripe_payment_intent_id`
+  if still payable instead of creating an orphaned second PaymentIntent, and returns `409` if
+  already `succeeded`; `apply_stripe_payment_result()` gained an ordering guard
+  (`AND payment_status != 'paid'`, migration `20260716000003_stripe_webhook_ordering_guard.sql`) so
+  a stale/out-of-order webhook event can never downgrade an already-paid order; the webhook route
+  now returns a real `500` (not a false-positive `200`) when the RPC call fails, so Stripe's own
+  retry/backoff actually engages. The failed-payment path (declined card, retries, out-of-order
+  events) is documented in `TESTING.md` §6; abandoned checkout, explicit cancellation, and
+  client-side timeout handling are intentionally documentation-only, deferred to Sprint 8.4.
+  `createOrder()`, `create_order_atomic()`, and the provider-agnostic payment boundary are all
+  unchanged.
 
 ## Current Status
 Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
@@ -252,7 +265,7 @@ Verified live against the linked Supabase project using the same permanent test 
   visually-hidden (`sr-only`) radio inputs and on a `useActionState` form's submit button, even
   though the underlying React state updates were correct — confirmed by dispatching the same
   interaction via `element.click()` / `form.requestSubmit()` through `preview_eval`, which worked
-  every time. Documented in `TESTING.md` §7 as an automation-tool limitation, not an app bug.
+  every time. Documented in `TESTING.md` §8 as an automation-tool limitation, not an app bug.
 
 ## Sprint 8.1 Verification (2026-07-16)
 
@@ -275,7 +288,7 @@ Verified live using the dev server and the permanent test account (per `TESTING.
   stack full-width with no horizontal overflow.
 - **Production build — PASS**, run twice (before and after the full set of changes).
 - **Tooling note:** the same previously-documented `sr-only` radio / form-submission automation
-  quirk (`TESTING.md` §7) recurred this session under the newer browser tool set — same root
+  quirk (`TESTING.md` §8) recurred this session under the newer browser tool set — same root
   cause, same workaround (`element.click()` via direct JS execution), not a new issue.
 
 ## Sprint 8.2 Verification (2026-07-16)
@@ -356,14 +369,41 @@ rehydrated from `localStorage` — a moment after React's hydration pass, not pa
 - **Isolation confirmed:** no changes to `useCartStore`'s public API, no changes to
   `src/app/checkout/*` or any checkout component.
 
+## Sprint 8.3 Verification (2026-07-17)
+
+Scope was explicitly payment architecture hardening, not activating real payments — no live
+Stripe test-mode keys are configured in this environment, so an end-to-end real charge remains
+unverified pending Sprint 8.4 (same external-dependency category as Sprint 7.0's Google OAuth):
+
+- **Card-only PaymentIntents — verified by code review.** `payment_method_types: ["card"]` set in
+  `src/lib/payments/stripe.ts`; no behavior to click-test without live keys.
+- **PaymentIntent reuse logic — verified by code review.** `/api/payments/stripe/intent/route.ts`
+  correctly checks `REUSABLE_STATUSES` before creating a new intent and returns `409` for an
+  already-`succeeded` order; cannot be exercised live without a real PaymentIntent to retrieve.
+- **Webhook ordering guard — verified by reading the deployed function body.** Confirmed
+  `apply_stripe_payment_result()`'s `UPDATE` now includes `AND payment_status != 'paid'` via a
+  live, read-only query against `pg_proc` on the linked project after applying migration
+  `20260716000003_stripe_webhook_ordering_guard.sql`.
+- **Webhook non-2xx on failure — verified by code review.** Both `payment_intent.succeeded` and
+  `payment_intent.payment_failed` branches in `src/app/api/webhooks/stripe/route.ts` now return
+  `500` on an RPC error instead of swallowing it; no live Stripe event available to trigger this
+  path end-to-end without configured keys.
+- **Production build — PASS**, run after all code changes.
+- **Regression check — PASS.** `createOrder()`, `create_order_atomic()`, `CheckoutClient.tsx`, and
+  checkout's happy path (order placement with Stripe unconfigured, same graceful-degradation
+  message as Sprint 8.0) all confirmed unaffected — no code outside the Stripe-specific modules
+  and one existing RPC function's body was touched.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.2, Patch 8.2.1, and Patch 8.2.2 are all complete. The next candidate is Sprint 8.3 —
-Payment Activation & Order Notifications (configure Stripe keys, verify a real charge, order confirmation
-email, tax calculation, coupon redemption UI) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT
-start new work without explicit user instruction.
+Sprint 8.2, Patch 8.2.1, Patch 8.2.2, and Sprint 8.3 are all complete. The next candidate is
+Sprint 8.4 — Payment Activation & Order Notifications (configure real Stripe keys, verify a live
+test-mode charge end-to-end including Sprint 8.3's fixes, order confirmation email, tax
+calculation, coupon redemption UI, `payment_intent.canceled` subscription, client-side timeout
+handling) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT start new work without explicit
+user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)
@@ -387,6 +427,10 @@ start new work without explicit user instruction.
   this by disabling confirmation project-wide (see `TESTING.md` §3 for why).
 - Orders and Wishlist are UI-only placeholders (`/account/orders`, `/account/wishlist`) — no
   `orders`/`wishlist_items` data is wired up yet.
+- Failed-payment path is only partially implemented (Sprint 8.3, `TESTING.md` §6): declined card
+  and retry (both reload and same-session) work today; abandoned checkout, explicit cancellation
+  (no `payment_intent.canceled` webhook subscription), and client-side payment timeout handling
+  are documented but intentionally deferred to Sprint 8.4.
 
 ## Do Not Change
 - Design system
