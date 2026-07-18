@@ -61,13 +61,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error ?? "Failed to initialize payment." }, { status: 502 });
   }
 
-  const { error: rpcError } = await supabase.rpc("record_stripe_payment_intent", {
+  const { data: recordedId, error: rpcError } = await supabase.rpc("record_stripe_payment_intent", {
     p_order_id: order.id,
     p_payment_intent_id: result.paymentIntentId,
   });
 
   if (rpcError) {
     console.error("[stripe intent] record_stripe_payment_intent failed", rpcError);
+    return NextResponse.json({ clientSecret: result.clientSecret });
+  }
+
+  // Patch 8.4.1: record_stripe_payment_intent() now only writes while
+  // stripe_payment_intent_id is still NULL, so two near-simultaneous
+  // requests for the same order naturally race for that single write --
+  // it always returns whichever id actually ended up stored. If that's
+  // not the id this request just created, this request lost the race.
+  if (recordedId && recordedId !== result.paymentIntentId) {
+    // The PaymentIntent created above is real but now orphaned --
+    // intentionally left alone here, not canceled or deleted. Canceling
+    // it would add another Stripe API call to the checkout hot path for
+    // a purely cosmetic cleanup with no correctness benefit: it's
+    // unconfirmed, nothing was ever charged, and Stripe expires
+    // unconfirmed PaymentIntents on its own. See the "PaymentIntent
+    // orphan cleanup" backlog item (docs/ROADMAP.md) for the deferred,
+    // purely operational follow-up -- it must never become part of this
+    // correctness path.
+    const winner = await retrieveStripePaymentIntent(recordedId);
+    if (winner?.client_secret) {
+      return NextResponse.json({ clientSecret: winner.client_secret });
+    }
+    // Winner's intent couldn't be retrieved (shouldn't normally happen)
+    // -- fall back to this request's own intent rather than fail the
+    // checkout outright.
   }
 
   return NextResponse.json({ clientSecret: result.clientSecret });

@@ -323,6 +323,10 @@ Payment architecture only, per explicit scope — order confirmation email, tax,
 - [ ] Coupon redemption UI at checkout (tables already exist)
 - [ ] Consider: `payment_intent.canceled` webhook subscription and/or a stale-order cleanup job (Sprint 8.3's deferred failed-payment items, `TESTING.md` §6)
 
+### Backlog — Operational Cleanup (not scheduled, not correctness-critical)
+
+- [ ] **PaymentIntent orphan cleanup** (Patch 8.4.1, ADR-024 addendum) — when a request loses the PaymentIntent-creation race, its own PaymentIntent is real but never referenced by any order, and is left alone rather than canceled (see the comment in `src/app/api/payments/stripe/intent/route.ts`). These orphans are inert (unconfirmed, never charged) and Stripe expires them on its own, so this is purely a Stripe-dashboard-tidiness concern, not a data-integrity one. A future pass could call `stripe.paymentIntents.cancel()` on the loser before returning, or run a periodic sweep for old `requires_payment_method` intents with no matching `orders.stripe_payment_intent_id`. **Explicitly not part of the correctness path** — the race itself is already fully fixed at the database layer; this is cosmetic follow-up only, and must not be bundled into a future correctness fix.
+
 ### Sprint 9 — AI Search
 **Goal:** Natural language product discovery powered by Claude
 

@@ -271,6 +271,21 @@ every item except Registration.
       mode silently recovers client-side), so the server log is the only reliable signal. Also
       confirm no empty-cart flash for a returning customer with items already saved, and that
       `npm run build` passes.
+- [ ] **Stripe PaymentIntent creation race guard (Patch 8.4.1, ADR-024 addendum)** — found live
+      during Sprint 8.4 verification: two near-simultaneous requests to
+      `/api/payments/stripe/intent` for the same order each created a separate, real Stripe
+      PaymentIntent (confirmed via `stripe payment_intents list`: two intents, identical
+      `orderId`/`orderNumber` metadata, created the same second), and the database only ever
+      retained one. Fixed with a conditional write in `record_stripe_payment_intent()` — see
+      ADR-024's addendum for the full design comparison. **Verified this session:** the deployed
+      function body matches the migration exactly (confirmed via a read-only `pg_proc` query),
+      `npm run build` passes, and `/checkout` continues to render correctly with no regression.
+      **Not verified this session:** an actual live concurrent-request test (e.g., firing two
+      real `/api/payments/stripe/intent` calls in parallel against a live order) — this requires
+      the test account's credentials, which weren't available this session. Re-run this specific
+      check once credentials are available: confirm exactly one Stripe PaymentIntent gets
+      referenced by the order and the "loser" request receives the winner's `client_secret`
+      rather than its own.
 
 ---
 
