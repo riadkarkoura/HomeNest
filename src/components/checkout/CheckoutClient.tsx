@@ -38,7 +38,16 @@ export default function CheckoutClient({ initialUser, initialAddresses }: Props)
   // store.ts; without this guard, `items` reads as [] for one render frame
   // before localStorage rehydrates, which briefly shows the empty-cart
   // screen to a returning customer who actually has items in their cart.
-  const [hasHydrated, setHasHydrated] = useState(() => useCartStore.persist.hasHydrated());
+  //
+  // Patch 8.3.1: the initial state must be a plain `false` literal, not a
+  // lazy useState(() => useCartStore.persist.hasHydrated()) initializer --
+  // that reads `.persist` during render, which also runs on the server. In
+  // a real Node.js SSR pass (not just Next's static-prerender build worker)
+  // there is no `window`, so zustand's persist middleware never assigns
+  // `api.persist` and this threw on every request. Deferring the read into
+  // useEffect (same pattern as Navbar's Patch 8.2.2 fix) sidesteps this
+  // entirely, since effects never run during server/build-time rendering.
+  const [hasHydrated, setHasHydrated] = useState(false);
   useEffect(() => {
     setHasHydrated(useCartStore.persist.hasHydrated());
     return useCartStore.persist.onFinishHydration(() => setHasHydrated(true));

@@ -264,6 +264,13 @@ every item except Registration.
       hydration warning appears in the console and the badge settles to the correct count. Also
       confirm `npm run build` succeeds for `/cart` (static) and `/account/addresses` (dynamic) —
       the underlying bug briefly broke the build itself (see Known Limitations).
+- [ ] **Checkout SSR hydration crash (Patch 8.3.1)** — with items in the cart, do a fresh, full
+      (non-client-navigated) request to `/checkout` and check the **server/terminal logs**, not
+      just the browser — confirm no `TypeError: Cannot read properties of undefined (reading
+      'hasHydrated')` is thrown. The browser page can look correct even when this is broken (dev
+      mode silently recovers client-side), so the server log is the only reliable signal. Also
+      confirm no empty-cart flash for a returning customer with items already saved, and that
+      `npm run build` passes.
 
 ---
 
@@ -293,11 +300,25 @@ every item except Registration.
   fix used a `useState(() => useCartStore.persist.hasHydrated())` lazy initializer — identical in
   shape to `CheckoutClient`'s existing guard — which crashed `next build`'s static-prerender pass
   with `Cannot read properties of undefined (reading 'hasHydrated')` on `/cart` and
-  `/account/addresses`. `useCartStore.persist` isn't available in that specific build-time worker
-  context (different from a real request-time SSR pass); `CheckoutClient` never hit this because
-  `/checkout` is never statically prerendered. If `CheckoutClient` is ever refactored in a way that
-  makes `/checkout` prerenderable, its identical lazy-initializer pattern carries the same latent
-  risk and should be updated to the effect-only form used here.
+  `/account/addresses`. At the time, this was believed to be scoped to that specific build-time
+  worker context only, distinct from a real request-time SSR pass, and `CheckoutClient` was left
+  unchanged on the theory that `/checkout` is never statically prerendered so its identical
+  lazy-initializer pattern was safe. **That assumption was wrong — see Patch 8.3.1 below.**
+- **Resolved (Patch 8.3.1): `CheckoutClient`'s identical lazy-initializer pattern was, in fact,
+  crashing on every real request**, not just the build-time worker. `useCartStore.persist` is
+  undefined in *any* Node.js SSR context — `window` doesn't exist there at all, causing zustand's
+  default `localStorage`-backed `createJSONStorage(() => window.localStorage)` to throw internally
+  and `persistImpl` to skip assigning `api.persist` entirely (confirmed by reading
+  `node_modules/zustand/middleware.js` directly). The crash was masked in casual dev-mode browser
+  checks because Next.js's client-side error recovery silently re-rendered the failing component
+  on the client (where `window` does exist), producing a visually correct page with no console
+  error — but the dev server logs showed the real exception on every request, and a `GET /checkout`
+  without that client-side recovery available returned a genuine `500`. Fixed identically to Patch
+  8.2.2: initial state changed to a plain `false` literal, every `.persist` read deferred into
+  `useEffect`. No changes to `useCartStore`'s public API, cart business logic, or checkout
+  behavior. Verified: `/checkout` no longer throws on SSR (confirmed via server logs across
+  repeated fresh navigations), the empty-cart flash is still prevented by the unchanged
+  `CheckoutSkeleton` gating logic, and `npm run build` passes cleanly.
 - **The browser automation tool used for this project's verification sometimes fails to register
   clicks on visually-hidden (`sr-only`) radio inputs and on `useActionState`-backed form submit
   buttons**, even though the underlying React wiring is correct — confirmed during Sprint 8.0 by
