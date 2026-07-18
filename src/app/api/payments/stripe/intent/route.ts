@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ clientSecret: result.clientSecret });
   }
 
-  // Patch 8.4.1: record_stripe_payment_intent() now only writes while
+  // Patch 8.3.2 -- PaymentIntent concurrency guard: record_stripe_payment_intent() now only writes while
   // stripe_payment_intent_id is still NULL, so two near-simultaneous
   // requests for the same order naturally race for that single write --
   // it always returns whichever id actually ended up stored. If that's
