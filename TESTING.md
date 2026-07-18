@@ -271,7 +271,8 @@ every item except Registration.
       mode silently recovers client-side), so the server log is the only reliable signal. Also
       confirm no empty-cart flash for a returning customer with items already saved, and that
       `npm run build` passes.
-- [ ] **Stripe PaymentIntent creation race guard (Patch 8.4.1, ADR-024 addendum)** — found live
+- [ ] **Stripe PaymentIntent creation race guard (Patch 8.3.2 — PaymentIntent concurrency guard,
+      ADR-024 addendum)** — found live
       during Sprint 8.4 verification: two near-simultaneous requests to
       `/api/payments/stripe/intent` for the same order each created a separate, real Stripe
       PaymentIntent (confirmed via `stripe payment_intents list`: two intents, identical
