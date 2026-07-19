@@ -160,6 +160,23 @@ charge until someone with Stripe Dashboard access completes this one-time setup.
    `payment_status` to flip from `unpaid` to `paid` after the webhook fires (check
    `/account/orders/[orderNumber]`).
 
+### 5a. Sprint 8.4 — Live End-to-End Verification Results (2026-07-19)
+
+First successful real (test-mode) card payment completed end-to-end, order `HN-20260719-0016`.
+Verified via `stripe listen` output, the dev server's own request log, and read-only database/
+Stripe API queries — not assumed from a green UI alone.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 1 | Webhook received | **PASS** | `stripe listen` forwarded `payment_intent.created` (×2), `payment_intent.succeeded`, `charge.succeeded`, `charge.updated` to `localhost:3000/api/webhooks/stripe` |
+| 2 | Webhook responded 2xx | **PASS** | Every forwarded event returned `[200]` in both `stripe listen`'s log and the dev server's own request log (`POST /api/webhooks/stripe 200`, 5 for 5) |
+| 3 | Order reaches `paid`/`processing` | **PASS** | `orders` row for `HN-20260719-0016`: `payment_status = 'paid'`, `status = 'processing'`, `updated_at` (01:01:13.55) lands between the `payment_intent.succeeded` and `charge.updated` events |
+| 4 | Stored `stripe_payment_intent_id` matches Stripe | **PASS** | DB stores `pi_...oCjomn`; `stripe payment_intents retrieve` on that exact id returns `status: "succeeded"`, `amount_received: 5800` (= order total $58.00), `metadata.orderNumber: "HN-20260719-0016"` |
+| 5 | Exactly one linked PaymentIntent | **PASS** | Stripe shows **two** PaymentIntents for this order's metadata (expected, documented trade-off of Patch 8.3.2 — Stripe-side creation isn't deduplicated, only DB linkage is): one `succeeded` (the one stored in the DB) and one `requires_payment_method` (the race's loser, correctly orphaned and untouched, never linked). Exactly one is ever linked/confirmed. |
+| 6 | No duplicate orders | **PASS** | Querying by both `order_number` and `id` returns exactly one row; no other order was created in the surrounding time window |
+
+**Conclusion:** the full payment lifecycle — PaymentIntent creation (including the concurrent-request race, which fired live and was handled correctly), card confirmation, webhook delivery, order status transition, and database consistency — is confirmed working end-to-end against real Stripe test-mode infrastructure. This is the first time this has been verified with an actual completed payment rather than code review or a partial flow.
+
 ---
 
 ## 6. Failed Payment Path (Sprint 8.3, ADR-024)
@@ -271,22 +288,20 @@ every item except Registration.
       mode silently recovers client-side), so the server log is the only reliable signal. Also
       confirm no empty-cart flash for a returning customer with items already saved, and that
       `npm run build` passes.
-- [ ] **Stripe PaymentIntent creation race guard (Patch 8.3.2 — PaymentIntent concurrency guard,
+- [x] **Stripe PaymentIntent creation race guard (Patch 8.3.2 — PaymentIntent concurrency guard,
       ADR-024 addendum)** — found live
       during Sprint 8.4 verification: two near-simultaneous requests to
       `/api/payments/stripe/intent` for the same order each created a separate, real Stripe
       PaymentIntent (confirmed via `stripe payment_intents list`: two intents, identical
       `orderId`/`orderNumber` metadata, created the same second), and the database only ever
       retained one. Fixed with a conditional write in `record_stripe_payment_intent()` — see
-      ADR-024's addendum for the full design comparison. **Verified this session:** the deployed
-      function body matches the migration exactly (confirmed via a read-only `pg_proc` query),
-      `npm run build` passes, and `/checkout` continues to render correctly with no regression.
-      **Not verified this session:** an actual live concurrent-request test (e.g., firing two
-      real `/api/payments/stripe/intent` calls in parallel against a live order) — this requires
-      the test account's credentials, which weren't available this session. Re-run this specific
-      check once credentials are available: confirm exactly one Stripe PaymentIntent gets
-      referenced by the order and the "loser" request receives the winner's `client_secret`
-      rather than its own.
+      ADR-024's addendum for the full design comparison. **Fully verified (2026-07-19, order
+      `HN-20260719-0016`, see §5a):** the same race fired live and naturally, unprompted, during a
+      real checkout — two `payment_intent.created` events, but only one `payment_intent.succeeded`.
+      The order's stored `stripe_payment_intent_id` matches exactly the `succeeded` PaymentIntent
+      in Stripe; the other (`requires_payment_method`) was correctly left orphaned and never
+      linked, confirming the "loser reuses the winner's intent" behavior works under a genuine,
+      not simulated, race.
 
 ---
 
@@ -303,9 +318,12 @@ every item except Registration.
   This is a real UX gap (a disabled/misconfigured provider should tell the user something went
   wrong) but was left unfixed per Sprint 7.0's "verification only, no code changes" scope — flag
   it for a future small fix rather than re-discovering it as a mystery.
-- **Stripe payment collection is coded but unconfigured** (Sprint 8.0) — see §2 and §5. Orders
-  place successfully and are stored as `pending`/`unpaid`; no real charge can be tested until
-  Stripe keys are added.
+- **Resolved (Sprint 8.4, 2026-07-19): Stripe payment collection is now live-verified end-to-end**
+  in this local environment (test-mode keys configured, `stripe listen` forwarding webhooks) — see
+  §5a. This was previously an open item since Sprint 8.0 (orders placed as `pending`/`unpaid` with
+  no way to test a real charge). Still outstanding: configuring test-mode keys in any *deployed*
+  (non-local) environment and its own webhook endpoint remains a separate, environment-specific
+  setup step (§5) — this local verification doesn't carry over automatically.
 - **Resolved (Patch 8.2.2): the Navbar cart badge used to hydration-mismatch** ("Cart, 0 items"
   server-rendered vs. "Cart, N items" once `useCartStore`'s `persist` middleware rehydrated from
   `localStorage`). Long-observed across earlier sprints but never formally tracked or fixed until
