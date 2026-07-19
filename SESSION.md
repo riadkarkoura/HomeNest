@@ -1,9 +1,10 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 8.3 — Stripe Payment Architecture (Hardening) — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
-8.0 (Milestone 2: First Sale), 8.1, and 8.2 are also complete. Patch 8.2.1 (`cart_items` NULL-variant
-race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) are also complete — see below.
+Sprint 8.4 — Stripe Test Mode & End-to-End Verification — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
+8.0 (Milestone 2: First Sale), 8.1, 8.2, and 8.3 are also complete. Patch 8.2.1 (`cart_items`
+NULL-variant race), Patch 8.2.2 (Navbar cart-badge hydration mismatch), Patch 8.3.1 (Checkout SSR
+hydration crash), and Patch 8.3.2 (PaymentIntent concurrency guard) are also complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -90,6 +91,24 @@ race) and Patch 8.2.2 (Navbar cart-badge hydration mismatch) are also complete �
   client-side timeout handling are intentionally documentation-only, deferred to Sprint 8.4.
   `createOrder()`, `create_order_atomic()`, and the provider-agnostic payment boundary are all
   unchanged.
+- ✅ Checkout SSR hydration crash fixed (Patch 8.3.1): `CheckoutClient.tsx` had been silently
+  throwing `TypeError: Cannot read properties of undefined (reading 'hasHydrated')` on every
+  real server-side render of `/checkout` (masked in dev mode by client-side error recovery, so it
+  never showed up as a visible bug) — same root cause class as Patch 8.2.2's Navbar fix, applied
+  here too: initial `hasHydrated` state changed to a plain `false` literal, every
+  `useCartStore.persist` read deferred into `useEffect`.
+- ✅ Stripe PaymentIntent creation race fixed (Patch 8.3.2 — PaymentIntent concurrency guard,
+  ADR-024 addendum): two near-simultaneous requests for the same order could both create a real
+  Stripe PaymentIntent and race to overwrite each other's `stripe_payment_intent_id`, permanently
+  orphaning one. `record_stripe_payment_intent()` (migration `20260718000001`) now writes
+  conditionally (`WHERE stripe_payment_intent_id IS NULL`) and always returns the order's current
+  value, so the losing request reuses the winner's intent instead of trusting its own — no locks,
+  no schema change, fully provider-agnostic.
+- ✅ Sprint 8.4 — Stripe Test Mode & End-to-End Verification: first real test-mode card payment
+  completed end-to-end through `/checkout` (order `HN-20260719-0016`), with webhook delivery,
+  order status transition, and database consistency all independently verified — including a
+  live, unprompted firing of the exact race Patch 8.3.2 fixed, correctly resolved. See the "Sprint
+  8.4 Completion Summary" section below and `TESTING.md` §5a for full results.
 
 ## Current Status
 Sprint 6.1 (Product CRUD) remains fully operational, unchanged.
@@ -394,16 +413,41 @@ unverified pending Sprint 8.4 (same external-dependency category as Sprint 7.0's
   message as Sprint 8.0) all confirmed unaffected — no code outside the Stripe-specific modules
   and one existing RPC function's body was touched.
 
+## Sprint 8.4 Completion Summary (2026-07-19)
+
+Sprint 8.4 — Stripe Test Mode & End-to-End Verification — **✅ COMPLETE.**
+
+- **End-to-end Stripe payment verified.** A real test-mode card payment was completed through
+  `/checkout` end to end for the first time this project — order `HN-20260719-0016`.
+- **Webhook verified.** `stripe listen` forwarded `payment_intent.created` (×2),
+  `payment_intent.succeeded`, `charge.succeeded`, and `charge.updated` to
+  `/api/webhooks/stripe`; all five returned `200`, confirmed in both the Stripe CLI's own log and
+  the dev server's request log.
+- **Database consistency verified.** The order transitioned to `payment_status = 'paid'`,
+  `status = 'processing'`; its stored `stripe_payment_intent_id` was cross-checked directly
+  against Stripe (`status: "succeeded"`, `amount_received` matching the order total exactly); no
+  duplicate order was created.
+- **Patch 8.3.2 validated by a real concurrent execution.** The PaymentIntent-creation race this
+  patch fixed fired live and unprompted during this same checkout (two `payment_intent.created`
+  events for one order) — the database correctly retained only the one that succeeded, and the
+  other was correctly left orphaned and unlinked. This is the first time that fix was proven
+  against a genuine race rather than code/schema inspection alone.
+- Full results table: `TESTING.md` §5a. All 6 verification checks (webhook received, webhook 2xx,
+  order status, PaymentIntent-id match, exactly-one-linked-intent, no-duplicate-orders) — **PASS**.
+- No code changes were made during this verification — no production bug was found.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.2, Patch 8.2.1, Patch 8.2.2, and Sprint 8.3 are all complete. The next candidate is
-Sprint 8.4 — Payment Activation & Order Notifications (configure real Stripe keys, verify a live
-test-mode charge end-to-end including Sprint 8.3's fixes, order confirmation email, tax
+Sprint 8.2, Patches 8.2.1/8.2.2/8.3.1/8.3.2, Sprint 8.3, and Sprint 8.4 (Stripe Test Mode &
+End-to-End Verification) are all complete. `docs/ROADMAP.md`'s "Upcoming Sprints" still lists a
+broader "Payment Activation & Order Notifications" placeholder (order confirmation email, tax
 calculation, coupon redemption UI, `payment_intent.canceled` subscription, client-side timeout
-handling) — see `docs/ROADMAP.md`'s "Upcoming Sprints". Do NOT start new work without explicit
-user instruction.
+handling) — that placeholder's number/scope hasn't been reconciled against the narrower Sprint 8.4
+that actually shipped and hasn't been renamed/renumbered here; do not assume it's the immediate
+next task without checking with the user first. Do NOT start new work without explicit user
+instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)
