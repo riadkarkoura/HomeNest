@@ -25,15 +25,16 @@ const cormorant = Cormorant_Garamond({
 
 export const metadata: Metadata = {
   title: {
-    default: "HomeNest — Luxury Home Furnishings",
+    default: "HomeNest — Smart Home Solutions",
     template: "%s | HomeNest",
   },
   description:
-    "Curated furniture and home accessories for a life well lived. Crafted with intention, built to last.",
-  keywords: ["furniture", "home decor", "luxury", "scandinavian", "modern"],
+    "We help people solve everyday household problems with smart, affordable, and beautifully designed products. We don't sell products — we sell solutions.",
+  keywords: ["smart home solutions", "household problems", "kitchen organization", "bathroom storage", "home organization"],
   openGraph: {
-    title: "HomeNest — Luxury Home Furnishings",
-    description: "Curated furniture and home accessories for a life well lived.",
+    title: "HomeNest — Smart Home Solutions",
+    description:
+      "We help people solve everyday household problems with smart, affordable, and beautifully designed products.",
     type: "website",
   },
 };

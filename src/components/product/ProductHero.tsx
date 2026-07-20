@@ -27,6 +27,7 @@ interface Props {
   added: boolean;
   onQuantityChange: (q: number) => void;
   onAddToCart: () => void;
+  onBuyNow: () => void;
   onWishlist: () => void;
   buyRef?: React.RefObject<HTMLDivElement | null>;
 }
@@ -44,6 +45,7 @@ export default function ProductHero({
   added,
   onQuantityChange,
   onAddToCart,
+  onBuyNow,
   onWishlist,
   buyRef,
 }: Props) {
@@ -293,10 +295,13 @@ export default function ProductHero({
               </motion.button>
             </div>
 
-            {/* Buy Now */}
+            {/* Buy Now -- Sprint 9.1: reuses the same onAddToCart the
+                button above calls, then navigates straight to checkout
+                (see ProductDetailClient.tsx's handleBuyNow). */}
             {product.inStock && (
               <motion.button
                 whileTap={{ scale: 0.97 }}
+                onClick={onBuyNow}
                 className="w-full inline-flex items-center justify-center gap-3 border border-stone-950 py-4 text-[13px] font-medium tracking-[0.06em] uppercase text-stone-950 hover:bg-stone-950 hover:text-white transition-all duration-300"
               >
                 Buy Now

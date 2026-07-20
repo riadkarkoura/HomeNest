@@ -96,12 +96,10 @@ export default function NewsletterSection() {
                     Subscribe <ArrowRight className="h-4 w-4" />
                   </motion.button>
                 </div>
+                {/* Sprint 9.1: "Read our Privacy Policy" link removed --
+                    no Privacy Policy page exists yet (Dead Links task). */}
                 <p className="text-[11px] text-stone-600">
-                  No spam. Unsubscribe anytime. Read our{" "}
-                  <a href="#" className="text-stone-400 underline underline-offset-2 hover:text-white transition-colors">
-                    Privacy Policy
-                  </a>
-                  .
+                  No spam. Unsubscribe anytime.
                 </p>
               </form>
             )}

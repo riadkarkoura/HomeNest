@@ -1,10 +1,10 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 8.4 — Stripe Test Mode & End-to-End Verification — ✅ COMPLETE. Sprints 7.0, 7.1, 7.2,
-8.0 (Milestone 2: First Sale), 8.1, 8.2, and 8.3 are also complete. Patch 8.2.1 (`cart_items`
-NULL-variant race), Patch 8.2.2 (Navbar cart-badge hydration mismatch), Patch 8.3.1 (Checkout SSR
-hydration crash), and Patch 8.3.2 (PaymentIntent concurrency guard) are also complete — see below.
+Sprint 9.1 — Product Integrity — ✅ COMPLETE. Sprint 9.0 (UX & Product Audit, `docs/UX_AUDIT.md`)
+and Sprints 7.0–8.4 are also complete. Patch 8.2.1 (`cart_items` NULL-variant race), Patch 8.2.2
+(Navbar cart-badge hydration mismatch), Patch 8.3.1 (Checkout SSR hydration crash), and Patch 8.3.2
+(PaymentIntent concurrency guard) are also complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -436,18 +436,46 @@ Sprint 8.4 — Stripe Test Mode & End-to-End Verification — **✅ COMPLETE.**
   order status, PaymentIntent-id match, exactly-one-linked-intent, no-duplicate-orders) — **PASS**.
 - No code changes were made during this verification — no production bug was found.
 
+## Sprint 9.1 Completion Summary (2026-07-19)
+
+Sprint 9.1 — Product Integrity — **✅ COMPLETE.** Implements the Tier 1 findings from Sprint 9.0's
+`docs/UX_AUDIT.md`, plus two scope decisions the user made explicit: Buy Now was built as a real
+flow (not removed), and dead links were removed outright rather than pointed at placeholders.
+
+- **Shipping Consistency** — `src/app/cart/page.tsx`'s shipping is now unconditionally free,
+  matching the real checkout flow (`SHIPPING_OPTIONS`'s Standard Delivery default) instead of the
+  old leftover `$500`/`$45` template values. Cart, checkout, and homepage now tell one consistent
+  shipping story.
+- **Search End-to-End** — `getProducts()` (`src/lib/supabase/queries/products.ts`) gained a `q`
+  keyword filter; `/products` reads and applies it; the navbar's search overlay
+  (`Navbar.tsx`) gained an actual working `<form onSubmit>` and functional suggestion chips,
+  where previously there was no way to submit a search at all. A real bug was found and fixed
+  during verification, not just claimed: the first implementation matched the whole query phrase,
+  so the homepage's own placeholder example ("My sink gets wet.") returned zero results — fixed to
+  match per-word.
+- **Buy Now** — `ProductHero.tsx`'s "Buy Now" button, previously dead (no `onClick` at all), now
+  reuses the exact same `handleAddToCart()` logic "Add to Cart" already uses
+  (`ProductDetailClient.tsx`), then navigates straight to `/checkout`. Verified live: adds exactly
+  one unit, never duplicates.
+- **Dead Links** — every `href="#"` in the codebase removed (verified via a repo-wide grep),
+  including two found outside the original audit's count (login page's Terms/Privacy Policy).
+  Footer's "Shop" links corrected to the real, existing categories instead of nonexistent
+  Living Room/Bedroom/Office.
+- **Branding Cleanup** — site metadata, footer copy, and cart empty-state copy no longer describe
+  a furniture store; replacement copy pulled directly from `PROJECT_VISION.md`'s own mission
+  statement, not invented.
+- Full verification detail: `TESTING.md` §7a. Production build passes; no regressions found in
+  checkout, cart persistence, or the Order Engine (none of those files were touched).
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 8.2, Patches 8.2.1/8.2.2/8.3.1/8.3.2, Sprint 8.3, and Sprint 8.4 (Stripe Test Mode &
-End-to-End Verification) are all complete. `docs/ROADMAP.md`'s "Upcoming Sprints" still lists a
-broader "Payment Activation & Order Notifications" placeholder (order confirmation email, tax
-calculation, coupon redemption UI, `payment_intent.canceled` subscription, client-side timeout
-handling) — that placeholder's number/scope hasn't been reconciled against the narrower Sprint 8.4
-that actually shipped and hasn't been renamed/renumbered here; do not assume it's the immediate
-next task without checking with the user first. Do NOT start new work without explicit user
-instruction.
+Sprint 9.1 is complete. `docs/UX_AUDIT.md`'s Tier 2–4 items (real navbar/homepage search was
+partially addressed by Sprint 9.1's "Search End-to-End" task; product colour/variant selector,
+mobile hero logo overlap, reduced-motion support, and real Orders/Wishlist data in `/account`
+remain open) and `docs/ROADMAP.md`'s "Payment Activation & Order Notifications" placeholder are
+both candidates for future scoping. Do NOT start new work without explicit user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)

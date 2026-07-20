@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart, totalPrice } = useCartStore();
   const total = totalPrice();
-  const shipping = total >= 500 ? 0 : 45;
+  // Mirrors the real checkout default (Standard Delivery is free, see
+  // SHIPPING_OPTIONS in src/lib/checkout/shipping-options.ts) -- this page
+  // is a pre-checkout estimate, not the place shipping method is chosen.
+  const shipping = 0;
   const grandTotal = total + shipping;
 
   if (items.length === 0) {
@@ -20,7 +23,7 @@ export default function CartPage() {
         <div className="text-center space-y-4 p-8">
           <ShoppingBag className="h-20 w-20 text-stone-200 mx-auto" />
           <h1 className="text-2xl font-light text-stone-900">Your cart is empty</h1>
-          <p className="text-stone-500">Time to find something beautiful.</p>
+          <p className="text-stone-500">Time to find your next solution.</p>
           <Link href="/products">
             <Button className="bg-stone-900 hover:bg-amber-700 text-white mt-4">
               Explore the Collection
@@ -141,15 +144,8 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-stone-600">
                   <span>Shipping</span>
-                  <span className={shipping === 0 ? "text-green-600 font-medium" : ""}>
-                    {shipping === 0 ? "Free" : `$${shipping}`}
-                  </span>
+                  <span className="text-green-600 font-medium">Free</span>
                 </div>
-                {shipping > 0 && (
-                  <p className="text-xs text-stone-400">
-                    Add ${(500 - total).toLocaleString()} more for free shipping
-                  </p>
-                )}
               </div>
 
               <Separator />

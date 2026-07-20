@@ -81,9 +81,9 @@ export function mapRow(row: ProductRow): Product {
 }
 
 export async function getProducts(
-  opts: { category?: string; sort?: string } = {}
+  opts: { category?: string; sort?: string; q?: string } = {}
 ): Promise<Product[]> {
-  const { category, sort = "default" } = opts;
+  const { category, sort = "default", q } = opts;
   try {
     let query = client()
       .from("products")
@@ -102,6 +102,25 @@ export async function getProducts(
     let products = (data as unknown as ProductRow[]).map(mapRow);
     if (category && category !== "All") {
       products = products.filter((p) => p.category === category);
+    }
+    // Sprint 9.1 (Search End-to-End task): simple keyword match over
+    // existing product fields -- no ranking, no NLP. Real AI-assisted
+    // search is Sprint 9's own separate, future scope (docs/ROADMAP.md).
+    // Matches on ANY word in the query (not the whole phrase) so a
+    // natural-language sentence like "My sink gets wet" -- the exact
+    // example the homepage's own placeholder suggests -- still finds the
+    // sink guard via its shared word "sink", instead of requiring the
+    // full sentence to appear verbatim somewhere.
+    if (q && q.trim()) {
+      const words = q.trim().toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
+      if (words.length > 0) {
+        products = products.filter((p) => {
+          const haystack = [p.name, p.description, p.category, p.problemSolved ?? "", ...p.tags]
+            .join(" ")
+            .toLowerCase();
+          return words.some((w) => haystack.includes(w));
+        });
+      }
     }
     return products;
   } catch (err) {

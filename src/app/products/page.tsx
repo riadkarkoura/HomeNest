@@ -9,12 +9,12 @@ export const metadata: Metadata = {
 };
 
 interface Props {
-  searchParams: Promise<{ category?: string; sort?: string }>;
+  searchParams: Promise<{ category?: string; sort?: string; q?: string }>;
 }
 
 export default async function ProductsPage({ searchParams }: Props) {
-  const { category = "All", sort = "default" } = await searchParams;
-  const filtered = await getProducts({ category, sort });
+  const { category = "All", sort = "default", q } = await searchParams;
+  const filtered = await getProducts({ category, sort, q });
 
   return (
     <div className="bg-stone-50 min-h-screen">
@@ -25,7 +25,11 @@ export default async function ProductsPage({ searchParams }: Props) {
           <h1 className="text-3xl sm:text-4xl font-light text-stone-900">
             All <span className="font-semibold">Products</span>
           </h1>
-          <p className="text-stone-500 mt-2">{filtered.length} solutions available</p>
+          <p className="text-stone-500 mt-2">
+            {q
+              ? `${filtered.length} result${filtered.length === 1 ? "" : "s"} for "${q}"`
+              : `${filtered.length} solutions available`}
+          </p>
         </div>
       </div>
 
@@ -41,7 +45,9 @@ export default async function ProductsPage({ searchParams }: Props) {
           </div>
         ) : (
           <div className="text-center py-24 text-stone-400">
-            <p className="text-lg font-medium">No products in this category yet</p>
+            <p className="text-lg font-medium">
+              {q ? `No solutions matched "${q}"` : "No products in this category yet"}
+            </p>
             <a href="/products" className="text-amber-600 text-sm mt-2 inline-block hover:underline">
               View all products
             </a>

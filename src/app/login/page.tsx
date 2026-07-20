@@ -217,16 +217,11 @@ export default function LoginPage() {
             </button>
           </p>
 
+          {/* Sprint 9.1 (Dead Links task): Terms/Privacy Policy links
+              removed -- neither page exists yet. Notice text kept, just
+              no longer a link to nowhere. */}
           <p className="text-xs text-stone-400 text-center">
-            By continuing, you agree to our{" "}
-            <Link href="#" className="underline">
-              Terms
-            </Link>{" "}
-            and{" "}
-            <Link href="#" className="underline">
-              Privacy Policy
-            </Link>
-            .
+            By continuing, you agree to our Terms and Privacy Policy.
           </p>
         </div>
       </div>

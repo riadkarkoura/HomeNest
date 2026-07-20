@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Product } from "@/types";
 import { useCartStore } from "@/lib/store";
 import { getProductContent } from "@/lib/product-content";
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function ProductDetailClient({ product, related }: Props) {
+  const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
 
   // ── Buy box state ───────────────────────────────────────────────────────────
@@ -33,6 +35,16 @@ export default function ProductDetailClient({ product, related }: Props) {
     for (let i = 0; i < quantity; i++) addItem(product);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
+  };
+
+  // Sprint 9.1 (Buy Now task): reuses handleAddToCart as-is -- same store
+  // call, same quantity loop, no separate add-to-cart logic -- then
+  // navigates straight to checkout. Calling handleAddToCart() exactly once
+  // here means this adds the same items a normal "Add to Cart" click
+  // would, never twice.
+  const handleBuyNow = () => {
+    handleAddToCart();
+    router.push("/checkout");
   };
 
   // ── Sticky buy box — appears after hero buy panel leaves viewport ───────────
@@ -96,6 +108,7 @@ export default function ProductDetailClient({ product, related }: Props) {
         added={added}
         onQuantityChange={setQuantity}
         onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
         onWishlist={() => setWishlisted((w) => !w)}
         buyRef={buyRef}
       />

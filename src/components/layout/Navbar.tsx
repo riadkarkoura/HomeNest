@@ -90,8 +90,8 @@ const NAV_ITEMS: NavItem[] = [
     },
   },
   { label: "New Arrivals", href: "/products" },
-  { label: "How It Works", href: "#" },
-  { label: "Journal",      href: "#" },
+  // Sprint 9.1 (Dead Links task): "How It Works" and "Journal" removed --
+  // neither page exists yet. Re-add once real destinations exist.
 ];
 
 const SEARCH_SUGGESTIONS = [
@@ -102,6 +102,7 @@ const SEARCH_SUGGESTIONS = [
 // ─── Search overlay ───────────────────────────────────────────────────────────
 
 function SearchOverlay({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -111,6 +112,16 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Sprint 9.1 (Search End-to-End task): the only way this overlay used to
+  // resolve was closing it -- no form, no submit, no Enter handling. Same
+  // destination/param shape as the homepage's SmartSearchSection, so both
+  // entry points behave identically once /products actually reads `q`.
+  const runSearch = (value: string) => {
+    if (!value.trim()) return;
+    router.push(`/products?q=${encodeURIComponent(value.trim())}`);
+    onClose();
+  };
 
   return (
     <motion.div
@@ -139,7 +150,13 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
         className="relative z-10 w-full max-w-3xl mx-auto px-6 pt-[18vh]"
       >
         {/* Input row */}
-        <div className="flex items-center gap-5 border-b border-white/15 pb-4 group focus-within:border-white/35 transition-colors duration-300">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            runSearch(query);
+          }}
+          className="flex items-center gap-5 border-b border-white/15 pb-4 group focus-within:border-white/35 transition-colors duration-300"
+        >
           <Search className="h-5 w-5 text-white/30 flex-shrink-0 group-focus-within:text-amber-400/70 transition-colors duration-300" />
           <input
             ref={inputRef}
@@ -150,13 +167,14 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
             className="flex-1 bg-transparent text-white text-[1.35rem] sm:text-2xl font-light placeholder:text-white/22 focus:outline-none"
           />
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 text-white/30 hover:text-white transition-colors duration-200 flex-shrink-0"
             aria-label="Close search"
           >
             <X className="h-5 w-5" />
           </button>
-        </div>
+        </form>
 
         {/* Suggestions */}
         <motion.div
@@ -172,7 +190,8 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
             {SEARCH_SUGGESTIONS.map((term) => (
               <button
                 key={term}
-                onClick={() => setQuery(term)}
+                type="button"
+                onClick={() => runSearch(term)}
                 className="text-[13px] text-white/45 hover:text-white border border-white/10 hover:border-white/25 px-4 py-2 transition-all duration-200 hover:bg-white/[0.04]"
               >
                 {term}

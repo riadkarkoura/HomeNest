@@ -302,6 +302,52 @@ every item except Registration.
       in Stripe; the other (`requires_payment_method`) was correctly left orphaned and never
       linked, confirming the "loser reuses the winner's intent" behavior works under a genuine,
       not simulated, race.
+- [x] **Sprint 9.1 — Product Integrity (Tier 1 fixes from `docs/UX_AUDIT.md`)** — see §7a for the
+      full task-by-task verification.
+
+---
+
+## 7a. Sprint 9.1 Verification (2026-07-19)
+
+Five tasks, all verified live against the dev server after `npm run build` passed cleanly. No
+regressions found in checkout, cart persistence, or the Order Engine — none of those files were
+touched.
+
+- **Shipping Consistency — PASS.** `src/app/cart/page.tsx`'s shipping is now unconditionally
+  `0` (`Free`), matching the real checkout flow's Standard Delivery default
+  (`src/lib/checkout/shipping-options.ts`). Confirmed live: cart with a $48 subtotal now shows
+  "Shipping: Free" / "Total: $48" instead of the old "$45" / "$93" ($500-threshold bug).
+- **Search End-to-End — PASS**, with one real bug found and fixed during verification, not just
+  claimed. `getProducts()` (`src/lib/supabase/queries/products.ts`) now accepts an optional `q`
+  and filters by keyword; `/products/page.tsx` reads and passes it through; the navbar's
+  `SearchOverlay` (`Navbar.tsx`) gained an actual `<form onSubmit>` and working suggestion chips.
+  **First implementation matched the whole query phrase**, so the homepage's own placeholder
+  example — "My sink gets wet." — returned 0 results; fixed to match on individual words instead,
+  confirmed via `/products?q=my%20sink%20gets%20wet` returning the 2 correct sink-related
+  products. Also verified: the navbar overlay's suggestion chips ("Shower caddy") correctly
+  navigate, filter, and close the overlay; a genuinely unmatched query ("zzz nonexistent") shows
+  an honest empty state, not an error or the full catalogue.
+- **Buy Now — PASS.** `ProductHero.tsx`'s "Buy Now" button now calls the exact same
+  `handleAddToCart()` used by "Add to Cart" (`ProductDetailClient.tsx`'s `handleBuyNow`), then
+  navigates to `/checkout`. Verified live: cart had 2× Silicone Sink Splash Guard before the
+  test; clicking Buy Now on that same product landed on `/checkout` showing "Subtotal (3 items)
+  $72" — exactly one unit added, no duplication, checkout's own "Free" Standard Delivery shown
+  consistently with the cart fix above.
+- **Dead Links — PASS.** Every `href="#"` in the codebase was removed (verified via a
+  repo-wide `grep` returning zero functional matches, only explanatory code comments) rather than
+  pointed at a placeholder. Removed: navbar's "How It Works"/"Journal", the footer's entire
+  Company/Support link groups and both bottom-bar legal links, the newsletter section's inline
+  "Privacy Policy" link, and — found during this task's own repo-wide sweep, outside
+  `docs/UX_AUDIT.md`'s original count — the login page's "Terms"/"Privacy Policy" links
+  (`src/app/login/page.tsx`), de-linked to plain text rather than deleting the consent notice
+  itself. The footer's "Shop" category links were corrected to the real, existing categories
+  (Kitchen/Bathroom/Storage) instead of the removed Living Room/Bedroom/Office.
+- **Branding Cleanup — PASS.** `src/app/layout.tsx`'s title/description/keywords/Open Graph tags
+  no longer say "Luxury Home Furnishings" — copy pulled directly from `PROJECT_VISION.md`'s own
+  mission statement, not invented. Footer tagline and shipping claim corrected to match; cart's
+  empty-state copy ("Time to find something beautiful" → "Time to find your next solution.")
+  aligned to the same voice. Verified live: browser tab title now reads "HomeNest — Smart Home
+  Solutions".
 
 ---
 
