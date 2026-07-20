@@ -351,6 +351,63 @@ touched.
 
 ---
 
+## 7b. Sprint 9.3 Verification (2026-07-19)
+
+Landing page experience redesign per `docs/LANDING_PAGE_EXPERIENCE.md`. All
+checks verified live against the dev server; no code changes were needed
+after initial implementation except a screenshot-timing false alarm (see
+below) and one real bug found and fixed during verification (the
+whole-phrase vs. per-word match issue was already fixed in Sprint 9.1's
+own search logic and reused correctly here — no regression).
+
+- **Hero — PASS.** New image (a genuinely bright, warm, real home-cooking
+  scene, confirmed by visual inspection before adopting it) replaces the
+  dusk/dim original; the five-layer vignette was softened while keeping
+  the headline and CTAs clearly legible — confirmed via screenshot at
+  both desktop (1440×900) and mobile (375×812). Primary CTA now reads
+  "Describe Your Problem" and anchor-links to `#ai-consultant`; secondary
+  CTA honestly relabeled "Browse Solutions" (was mislabeled "How It Works"
+  while linking to `/products` — see `docs/UX_AUDIT.md`).
+- **AI Home Consultant — PASS, full flow tested.** Section moved to
+  position 2 (immediately after Hero), shifted from dark to warm/light
+  background per the confirmed design decision. Tested three real
+  scenarios: (1) "my kitchen is too small" → correct echo, "Cook smarter,
+  not harder." strategy line, 3 genuinely Kitchen-category products
+  shown, "See all 7 matching solutions" link present; (2) "Describe
+  another problem" correctly resets the section back to the input step;
+  (3) a deliberately unmatched query ("zzz completely unrelated nonsense
+  query") correctly shows the honest empty state ("We couldn't match that
+  to a specific solution yet" + a link to the full catalogue) rather than
+  fabricating a match or erroring.
+- **How It Works — PASS.** New section renders correctly between the AI
+  Consultant and the trust marquee, all four steps (Describe / Understand
+  / Strategy / Recommend) present with correct copy.
+- **Recommended Solutions (renamed from Best Sellers) — PASS.**
+  `ProductCard` now shows each product's `problemSolved` text instead of
+  the generic description — confirmed live: cards now read "Eliminates
+  water splash around the sink area," "Frees counter space occupied by a
+  bulky knife block," etc., instead of the previous generic descriptions.
+- **Information architecture — PASS.** Full section order confirmed live:
+  Hero → AI Consultant → How It Works → Marquee → Shop by Problem →
+  Category tiles → Recommended Solutions → Craft → Testimonials →
+  Newsletter. `PhilosophySection.tsx` and `SmartSearchSection.tsx` were
+  deleted outright (not just unused) since both were fully superseded.
+- **Mobile — PASS.** Hero and AI Consultant section both reflow cleanly
+  at 375×812 (submit button collapses to icon-only, chips wrap to two
+  rows). The pre-existing, already-documented mobile hero logo/stats-bar
+  overlap (`docs/UX_AUDIT.md` §6) is still present — unrelated to this
+  sprint's scope and not touched.
+- **Production build — PASS**, clean TypeScript/ESLint, `/` still
+  statically prerendered.
+- **Tooling note, not an app bug:** an early screenshot appeared to show a
+  completely blank Hero with no visible text. Re-checking via
+  `get_page_text` confirmed all content was present in the DOM; a second
+  screenshot taken after the full ~2s entrance-animation sequence
+  completed showed the Hero rendering correctly. The first screenshot was
+  simply taken mid-animation, not a rendering defect.
+
+---
+
 ## 8. Known Limitations
 
 - **Supabase's auth email rate limit is easy to exhaust during manual testing.** Budget

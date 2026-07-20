@@ -1,11 +1,13 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 9.2 — Brand Identity & Design System — not yet started (planning/implementation pending
-explicit instruction). Sprint 9.1 (Product Integrity) and Sprint 9.0 (UX & Product Audit,
-`docs/UX_AUDIT.md`) are complete, as are Sprints 7.0–8.4. Patch 8.2.1 (`cart_items` NULL-variant
-race), Patch 8.2.2 (Navbar cart-badge hydration mismatch), Patch 8.3.1 (Checkout SSR hydration
-crash), and Patch 8.3.2 (PaymentIntent concurrency guard) are also complete — see below.
+Sprint 9.3 — HomeNest Experience Transformation — ✅ COMPLETE (implementation done, not yet
+committed). Sprint 9.2 (Brand Identity & Design System — `docs/BRAND_FOUNDATION.md`,
+`docs/DESIGN_TOKENS.md`, `docs/COMPONENT_SYSTEM.md`), Sprint 9.1 (Product Integrity), and Sprint
+9.0 (UX & Product Audit, `docs/UX_AUDIT.md`) are all complete, as are Sprints 7.0–8.4. Patch 8.2.1
+(`cart_items` NULL-variant race), Patch 8.2.2 (Navbar cart-badge hydration mismatch), Patch 8.3.1
+(Checkout SSR hydration crash), and Patch 8.3.2 (PaymentIntent concurrency guard) are also
+complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -468,17 +470,59 @@ flow (not removed), and dead links were removed outright rather than pointed at 
 - Full verification detail: `TESTING.md` §7a. Production build passes; no regressions found in
   checkout, cart persistence, or the Order Engine (none of those files were touched).
 
+## Sprint 9.2 Completion Summary (2026-07-19)
+
+Sprint 9.2 — Brand Identity & Design System — **✅ COMPLETE.** Three planning documents, no code:
+`docs/BRAND_FOUNDATION.md` (strategic identity — mission, vision, personality, visual/motion
+direction, trust principles, anti-patterns), `docs/DESIGN_TOKENS.md` (semantic token architecture —
+color roles, typography/spacing/motion token philosophy, naming convention, governance — zero
+concrete values, by design), and `docs/COMPONENT_SYSTEM.md` (a full audit of the ~68-file component
+library against that architecture, with Keep/Adopt/Improve/Merge/Missing verdicts per component,
+an Implementation Priority table, and Component Evolution Principles). None of the findings from
+this audit were implemented yet at the time — that became Sprint 9.3's job.
+
+## Sprint 9.3 Completion Summary (2026-07-19)
+
+Sprint 9.3 — HomeNest Experience Transformation — **✅ COMPLETE (implementation done, not
+committed).** Planned first as `docs/LANDING_PAGE_EXPERIENCE.md` (with four consequential
+decisions confirmed before any code was written — see that document's §2 for the resolution of a
+real tension it found against `PROJECT_VISION.md`'s "stays a premium ecommerce experience" clause),
+then implemented:
+
+- **Hero** — image replaced with a genuinely bright, warm, real home-cooking photo (verified
+  visually before adopting it); the five-layer dark vignette softened substantially while keeping
+  text legible; primary CTA changed from "Shop Solutions" to "Describe Your Problem" (anchors to
+  the AI section); secondary CTA honestly relabeled "Browse Solutions" (was mislabeled "How It
+  Works" while linking to `/products`).
+- **AI Home Consultant** (replaces "AI Smart Search") — a genuinely new component
+  (`AIConsultantSection.tsx`), moved to position 2 right after Hero, shifted from dark to warm/light
+  background. Built as a real three-step flow — describe → understand (echoes the visitor's exact
+  words) → strategy (a short line pulled from existing category copy, never fabricated) → recommend
+  (real matched products) — entirely on Sprint 9.1's existing keyword-match logic, with no new AI
+  backend, per explicit instruction. Verified live end-to-end including a genuine match, the reset
+  flow, and a deliberately unmatched query producing an honest empty state rather than a fabricated
+  one.
+- **How It Works** (new, replaces Philosophy) — a four-step visual walkthrough of the same
+  Describe/Understand/Strategy/Recommend arc, for visitors who scroll past the consultant without
+  using it yet.
+- **Recommended Solutions** (renamed from Best Sellers/Featured) — `ProductCard` now shows each
+  product's `problemSolved` field instead of its generic description, applying "products are
+  solutions" globally rather than to one section only.
+- `PhilosophySection.tsx` and `SmartSearchSection.tsx` deleted outright (fully superseded, not
+  left as dead code).
+- Full verification detail: `TESTING.md` §7b. Production build passes; mobile reflow confirmed at
+  375×812. Checkout, Cart, Account, and the Order Engine were not touched.
+
 ## Current Branch
 main
 
 ## Next Task
-Sprint 9.2 — Brand Identity & Design System is the named current sprint, but **not yet planned or
-implemented** — only the label has been set. `docs/UX_AUDIT.md`'s Tier 2–4 items (real
-navbar/homepage search was partially addressed by Sprint 9.1's "Search End-to-End" task; product
-colour/variant selector, mobile hero logo overlap, reduced-motion support, and real Orders/Wishlist
-data in `/account` remain open) and `docs/ROADMAP.md`'s "Payment Activation & Order Notifications"
-placeholder are separate, still-unscoped candidates. Do NOT start Sprint 9.2 or any other new work
-without explicit user instruction.
+Sprint 9.3's implementation is complete but **not yet committed or pushed** — awaiting explicit
+instruction. Beyond that, `docs/UX_AUDIT.md`'s remaining Tier 2–4 items (product colour/variant
+selector, mobile hero logo/stats-bar overlap — still present, unrelated to this sprint — reduced-
+motion support, real Orders/Wishlist data in `/account`) and `docs/ROADMAP.md`'s "Payment
+Activation & Order Notifications" placeholder remain separate, still-unscoped candidates. Do NOT
+start any new work without explicit user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)

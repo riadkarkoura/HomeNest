@@ -115,8 +115,8 @@ function SearchOverlay({ onClose }: { onClose: () => void }) {
 
   // Sprint 9.1 (Search End-to-End task): the only way this overlay used to
   // resolve was closing it -- no form, no submit, no Enter handling. Same
-  // destination/param shape as the homepage's SmartSearchSection, so both
-  // entry points behave identically once /products actually reads `q`.
+  // destination/param shape as the homepage's AI Consultant section
+  // (Sprint 9.3), so both entry points land on the same /products results.
   const runSearch = (value: string) => {
     if (!value.trim()) return;
     router.push(`/products?q=${encodeURIComponent(value.trim())}`);

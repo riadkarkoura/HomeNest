@@ -29,7 +29,7 @@ export default function FeaturedSection({ products }: Props) {
               transition={{ duration: 0.7, ease: EASE }}
               className="text-[10px] uppercase tracking-[0.3em] text-amber-600 mb-3"
             >
-              Best Sellers
+              Recommended Solutions
             </motion.p>
             <motion.h2
               initial={{ opacity: 0, y: 16 }}
@@ -37,7 +37,7 @@ export default function FeaturedSection({ products }: Props) {
               transition={{ duration: 0.8, delay: 0.05, ease: EASE }}
               className="display-section text-[clamp(2rem,5vw,3.75rem)] text-stone-900"
             >
-              Products that work.
+              Solutions that work.
             </motion.h2>
           </div>
           <motion.div

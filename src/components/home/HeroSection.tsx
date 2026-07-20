@@ -86,7 +86,7 @@ export default function HeroSection() {
       ref={sectionRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="relative h-[100svh] min-h-[660px] flex flex-col overflow-hidden bg-stone-950"
+      className="relative h-[100svh] min-h-[660px] flex flex-col overflow-hidden bg-stone-900"
       aria-label="Hero"
     >
       {/*
@@ -140,7 +140,7 @@ export default function HeroSection() {
             className="absolute inset-[-4%]"
           >
             <Image
-              src="https://images.unsplash.com/photo-1556911220-bff31c812dba?w=1800&q=85"
+              src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1800&q=85"
               alt=""
               fill
               priority
@@ -162,19 +162,23 @@ export default function HeroSection() {
         />
 
         {/* ── Layer 3: Gradient vignettes ── */}
-        {/* Bottom: strong dark base so stats bar reads cleanly */}
-        <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/50 to-stone-950/10" />
-        {/* Left: anchors the text side */}
-        <div className="absolute inset-0 bg-gradient-to-r from-stone-950/75 via-stone-950/30 to-transparent" />
+        {/* Sprint 9.3: softened from a near-black cinematic vignette to a
+            warm gradient -- kept only strong enough for text legibility,
+            per docs/LANDING_PAGE_EXPERIENCE.md's "avoid the heavy dark
+            feeling" decision. */}
+        {/* Bottom: keeps the stats bar readable without a heavy dark base */}
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-900/85 via-stone-900/35 to-transparent" />
+        {/* Left: anchors the text side, softened */}
+        <div className="absolute inset-0 bg-gradient-to-r from-stone-900/55 via-stone-900/15 to-transparent" />
         {/* Top: subtle fade so the transparent navbar doesn't fight the image */}
-        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-stone-950/40 to-transparent" />
-        {/* Corner vignettes: 4 radial punches for cinema depth */}
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-stone-900/25 to-transparent" />
+        {/* Corner vignettes: softened for warmth over cinema depth */}
         <div
-          className="absolute inset-0 opacity-60"
+          className="absolute inset-0 opacity-30"
           style={{
             background:
-              "radial-gradient(ellipse 80% 80% at 100% 0%, #0c0a0900 60%, #0c0a09 100%)," +
-              "radial-gradient(ellipse 60% 60% at 100% 100%, #0c0a0900 50%, #0c0a09 100%)",
+              "radial-gradient(ellipse 80% 80% at 100% 0%, #1c191700 60%, #1c1917 100%)," +
+              "radial-gradient(ellipse 60% 60% at 100% 100%, #1c191700 50%, #1c1917 100%)",
           }}
         />
 
@@ -258,8 +262,9 @@ export default function HeroSection() {
             transition={{ duration: 0.8, delay: COPY_DELAYS.ctas, ease: EASE }}
             className="flex flex-wrap items-center gap-5"
           >
-            {/* Primary — white, shimmer on hover */}
-            <Link href="/products">
+            {/* Primary — leads into the AI Consultant section, not the
+                catalog (Sprint 9.3, consultation-first decision) */}
+            <Link href="#ai-consultant">
               <motion.button
                 whileHover="hover"
                 whileTap={{ scale: 0.97 }}
@@ -281,19 +286,21 @@ export default function HeroSection() {
                   aria-hidden
                 />
                 <span className="relative flex items-center gap-3">
-                  Shop Solutions
+                  Describe Your Problem
                   <ArrowRight className="h-3.5 w-3.5" />
                 </span>
               </motion.button>
             </Link>
 
-            {/* Secondary — text link, underline slide */}
+            {/* Secondary — honestly relabeled: this always linked straight
+                to the catalog, "How It Works" was a mislabel (see
+                docs/UX_AUDIT.md) */}
             <Link href="/products">
               <motion.span
                 className="group inline-flex items-center gap-2 text-[13px] text-white/55 hover:text-white/90 transition-colors duration-300 cursor-pointer tracking-wide relative"
                 whileHover="hover"
               >
-                How It Works
+                Browse Solutions
                 <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 {/* Underline slide */}
                 <motion.span

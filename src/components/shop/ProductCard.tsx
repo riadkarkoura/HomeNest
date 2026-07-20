@@ -94,8 +94,12 @@ export default function ProductCard({ product, index = 0 }: Props) {
           </h3>
         </Link>
 
+        {/* Sprint 9.3: prefers problemSolved over the plain description --
+            "products are solutions," never shown without the problem they
+            address, per docs/LANDING_PAGE_EXPERIENCE.md. Falls back to the
+            existing description for any product without that field set. */}
         <p className="text-[13px] text-stone-400 line-clamp-2 leading-relaxed mb-4 flex-1">
-          {product.description}
+          {product.problemSolved ?? product.description}
         </p>
 
         {/* Rating */}
