@@ -1,10 +1,11 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 9.1 — Product Integrity — ✅ COMPLETE. Sprint 9.0 (UX & Product Audit, `docs/UX_AUDIT.md`)
-and Sprints 7.0–8.4 are also complete. Patch 8.2.1 (`cart_items` NULL-variant race), Patch 8.2.2
-(Navbar cart-badge hydration mismatch), Patch 8.3.1 (Checkout SSR hydration crash), and Patch 8.3.2
-(PaymentIntent concurrency guard) are also complete — see below.
+Sprint 9.2 — Brand Identity & Design System — not yet started (planning/implementation pending
+explicit instruction). Sprint 9.1 (Product Integrity) and Sprint 9.0 (UX & Product Audit,
+`docs/UX_AUDIT.md`) are complete, as are Sprints 7.0–8.4. Patch 8.2.1 (`cart_items` NULL-variant
+race), Patch 8.2.2 (Navbar cart-badge hydration mismatch), Patch 8.3.1 (Checkout SSR hydration
+crash), and Patch 8.3.2 (PaymentIntent concurrency guard) are also complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -471,11 +472,13 @@ flow (not removed), and dead links were removed outright rather than pointed at 
 main
 
 ## Next Task
-Sprint 9.1 is complete. `docs/UX_AUDIT.md`'s Tier 2–4 items (real navbar/homepage search was
-partially addressed by Sprint 9.1's "Search End-to-End" task; product colour/variant selector,
-mobile hero logo overlap, reduced-motion support, and real Orders/Wishlist data in `/account`
-remain open) and `docs/ROADMAP.md`'s "Payment Activation & Order Notifications" placeholder are
-both candidates for future scoping. Do NOT start new work without explicit user instruction.
+Sprint 9.2 — Brand Identity & Design System is the named current sprint, but **not yet planned or
+implemented** — only the label has been set. `docs/UX_AUDIT.md`'s Tier 2–4 items (real
+navbar/homepage search was partially addressed by Sprint 9.1's "Search End-to-End" task; product
+colour/variant selector, mobile hero logo overlap, reduced-motion support, and real Orders/Wishlist
+data in `/account` remain open) and `docs/ROADMAP.md`'s "Payment Activation & Order Notifications"
+placeholder are separate, still-unscoped candidates. Do NOT start Sprint 9.2 or any other new work
+without explicit user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)
