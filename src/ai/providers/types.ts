@@ -17,21 +17,7 @@ import type {
   AIResult,
   AITokenUsage,
 } from "@/ai/shared";
-
-/**
- * A capability a provider may or may not support for a given model.
- * Calling code checks {@link AIProvider.capabilities} before relying on
- * optional behavior (like streaming) instead of assuming every provider
- * supports everything — this is what lets Ollama (which may not support
- * every capability a hosted API does) satisfy the same interface as
- * OpenAI without either side needing special-casing elsewhere.
- */
-export type AIProviderCapability =
-  | "chat"
-  | "streaming"
-  | "toolCalling"
-  | "embeddings"
-  | "vision";
+import type { AIProviderCapability } from "./capabilities";
 
 /**
  * The static configuration a provider adapter is constructed with.
