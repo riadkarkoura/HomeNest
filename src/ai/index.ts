@@ -21,3 +21,4 @@ export * from "./prompts";
 export * from "./memory";
 export * from "./guardrails";
 export * from "./telemetry";
+export * from "./context-engine";
