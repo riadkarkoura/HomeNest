@@ -7,8 +7,9 @@
  * specific vendor's SDK. This module contains no concrete provider
  * integration and no business logic — only the shared vocabulary and
  * interfaces every future AI feature is built against, plus the
- * provider-agnostic orchestration engine that coordinates a request
- * through its lifecycle.
+ * provider-agnostic runtime engines that coordinate a request through its
+ * lifecycle (orchestration) and assemble the context it needs beforehand
+ * (context engine).
  *
  * Consumers should import from `@/ai` rather than reaching into a
  * specific submodule directly, so this barrel — not the underlying file
@@ -23,3 +24,4 @@ export * from "./memory";
 export * from "./guardrails";
 export * from "./telemetry";
 export * from "./orchestration";
+export * from "./context-engine";
