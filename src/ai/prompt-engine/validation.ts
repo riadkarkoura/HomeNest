@@ -24,7 +24,16 @@ export interface AIPromptValidationResult {
   readonly issues: readonly AIPromptValidationIssue[];
 }
 
-/** Checks whether a built prompt is valid for the strategy it was built under. */
+/**
+ * Checks whether a built prompt is valid for the strategy it was built under.
+ *
+ * Takes no separate `language` parameter (2026-07-22 architecture review
+ * closure) because it doesn't need one: `prompt.metadata.language` is
+ * already reachable through `prompt` itself by the time this stage runs,
+ * so a validator that genuinely needs to check something language-specific
+ * already can, with no interface change — confirmed by design, not an
+ * oversight.
+ */
 export interface AIPromptValidator {
   validate(prompt: AIPrompt, strategy: AIPromptStrategy): AIPromptValidationResult;
 }

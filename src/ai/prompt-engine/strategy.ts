@@ -34,7 +34,19 @@ export interface AIPromptStrategy {
   readonly examples?: readonly AIPromptExample[];
 }
 
-/** Decides which strategy applies to a request. Pure — no fetching. */
+/**
+ * Decides which strategy applies to a request. Pure — no fetching.
+ *
+ * Deliberately does not take the resolved `AILanguageCode` (2026-07-22
+ * architecture review closure): which strategy applies is driven by
+ * `request.feature` — *what kind of task this is* — not by what language
+ * the visitor speaks. `request.languagePreference` is already reachable
+ * here if a genuinely language-driven strategy (a locale-specific
+ * fallback, say) is ever needed; adding a resolved-language parameter
+ * now, with no selector that uses it, would be coupling this contract to
+ * a concern it doesn't yet have — an additive change to make when that
+ * real need appears, not before.
+ */
 export interface AIPromptStrategySelector {
   select(request: AIPromptRequest): AIPromptStrategy;
 }

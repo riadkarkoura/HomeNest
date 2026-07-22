@@ -15,7 +15,17 @@
 import type { AIAssembledContext } from "@/ai/context-engine";
 import type { AIPromptContextSection } from "./model";
 
-/** Reshapes an assembled context into the prompt's context sections. */
+/**
+ * Reshapes an assembled context into the prompt's context sections.
+ *
+ * Deliberately does not take the resolved `AILanguageCode` (2026-07-22
+ * architecture review closure): a fragment's `data` is raw, structured
+ * information (a user id, a product's price, a session flag) — this
+ * stage reshapes its *shape*, never its *phrasing*. There is nothing here
+ * for a language to change; turning any of this into localized text is
+ * the Renderer's job alone (`./renderer`), once everything else has been
+ * assembled.
+ */
 export interface AIPromptContextApplier {
   apply(context: AIAssembledContext): readonly AIPromptContextSection[];
 }

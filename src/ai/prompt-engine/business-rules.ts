@@ -15,7 +15,18 @@
 import type { AIPromptStrategy } from "./strategy";
 import type { AIPromptBusinessRule } from "./model";
 
-/** Supplies the business rules that apply to a strategy. */
+/**
+ * Supplies the business rules that apply to a strategy.
+ *
+ * Deliberately does not take the resolved `AILanguageCode` (2026-07-22
+ * architecture review closure): this stage decides *which* rules apply —
+ * a policy decision independent of language — never *how a rule's text
+ * reads*. The same rule ("recommend a solution, not just a product")
+ * governs a Home Consultant conversation whether the visitor is speaking
+ * Arabic, German, or English; if a rule's phrasing needs to be
+ * language-specific, that's the Renderer's job (`./renderer`) via
+ * `AIPromptLocalizer`, not this stage's.
+ */
 export interface AIBusinessRuleProvider {
   provide(strategy: AIPromptStrategy): readonly AIPromptBusinessRule[];
 }

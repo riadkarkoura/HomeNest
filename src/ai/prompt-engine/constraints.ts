@@ -13,7 +13,18 @@
 import type { AIPromptStrategy } from "./strategy";
 import type { AIPromptConstraint } from "./model";
 
-/** Supplies the constraints that apply to a strategy. */
+/**
+ * Supplies the constraints that apply to a strategy.
+ *
+ * Deliberately does not take the resolved `AILanguageCode`, for the same
+ * reason `AIBusinessRuleProvider` doesn't (2026-07-22 architecture review
+ * closure): *which* constraints apply is policy, not phrasing. A
+ * market/jurisdiction-specific constraint (a region-specific disclaimer
+ * requirement, say) is a real future possibility, but that's a
+ * market/region concern to model explicitly when it's actually needed —
+ * not something to infer from language today, which would only
+ * approximate it incorrectly.
+ */
 export interface AIConstraintProvider {
   provide(strategy: AIPromptStrategy): readonly AIPromptConstraint[];
 }

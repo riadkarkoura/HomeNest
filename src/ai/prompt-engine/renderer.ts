@@ -12,6 +12,17 @@
  * `AIPromptTemplate.render`'s own "pure function" contract in
  * `@/ai/prompts` — a prompt that reached this stage already passed
  * validation, so rendering never fails.
+ *
+ * The language this stage renders in comes from `prompt.metadata.language`
+ * — already resolved, once, before any stage ran (2026-07-22 architecture
+ * review closure). This is the one stage every fragment of the pipeline's
+ * language handling was ultimately building toward: every other stage's
+ * decision to *not* take language explicitly (see `./strategy`,
+ * `./context-application`, `./business-rules`, `./constraints`,
+ * `./output-format`) rests on phrasing being exclusively this stage's
+ * responsibility — a concrete `AIPromptRenderer` implementation is
+ * expected to read `prompt.metadata.language` and pass it to its
+ * `AIPromptLocalizer` for every piece of text it produces.
  */
 
 import type { AIRenderedPrompt } from "@/ai/prompts";

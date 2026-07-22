@@ -38,6 +38,23 @@
  * collaborator that does need to fetch (a database-backed persona
  * registry, say) can become async later without changing this class's
  * public shape.
+ *
+ * Language propagation (2026-07-22 architecture review closure): the
+ * resolved `AILanguageCode` is computed once, here, before any stage
+ * runs. Of the eight stages, only `personaResolver.resolve` receives it
+ * explicitly — voice/tone/culture is a genuine *selection* decision that
+ * can vary by language. Every other stage's independence from language
+ * was reviewed individually and is documented in its own file (`./strategy`,
+ * `./context-application`, `./business-rules`, `./constraints`,
+ * `./output-format`, `./validation`): each decides *what content applies*
+ * (a strategy, a set of rules, a format), never *how it's phrased* —
+ * phrasing is the Renderer's job alone (`./renderer`), which already has
+ * full access to the resolved language via `prompt.metadata.language` by
+ * the time it runs. Adding a `language` parameter to those other six
+ * would be coupling with no current caller and no current stage that
+ * needs it — deferred deliberately, not overlooked; each is an additive,
+ * non-breaking change to make if a real future strategy/rule/format
+ * ever needs to vary by language.
  */
 
 import type { AIResult } from "@/ai/shared";
@@ -104,7 +121,7 @@ export class DefaultPromptEngine implements AIPromptEngine {
       prompt = { ...prompt, examples: strategy.examples };
     }
 
-    const persona = this.personaResolver.resolve(strategy);
+    const persona = this.personaResolver.resolve(strategy, language);
     if (persona) {
       prompt = {
         ...prompt,
