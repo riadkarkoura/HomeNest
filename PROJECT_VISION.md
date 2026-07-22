@@ -59,6 +59,13 @@ The platform should eventually support dedicated agents for:
 - This is strategic direction, not a sprint. `docs/ROADMAP.md` is unaffected by this vision — no AI sprint is added by it.
 - Nothing here authorizes building AI now. Treat it as a lens for design decisions — does this leave room for an agent later? — not a task list.
 
+> **Note (2026-07-22, ADR-025):** the two points above described the state through Sprint 9. As
+> of Sprint 10, `docs/ROADMAP.md` *does* carry an AI sprint (Sprint 10 — AI Foundation, complete;
+> Sprint 11 — AI Runtime & Search Integration, upcoming) — added by explicit, dated user
+> instruction, not by this document authorizing itself. This vision statement still does not, on
+> its own, authorize building anything; it remains a lens, not standing permission. See
+> `docs/DECISIONS.md` ADR-025 for the decision record.
+
 ---
 
 ## Brand Personality

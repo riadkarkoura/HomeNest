@@ -1,13 +1,24 @@
 # HomeNest Session
 
 ## Current Sprint
-Sprint 9.3 — HomeNest Experience Transformation — ✅ COMPLETE (implementation done, not yet
-committed). Sprint 9.2 (Brand Identity & Design System — `docs/BRAND_FOUNDATION.md`,
+Sprint 10 — AI Foundation — ✅ COMPLETE (retroactively documented 2026-07-22 as part of an
+Architecture Documentation Reconciliation — see `docs/DECISIONS.md` ADR-025 and
+`docs/ARCHITECTURE.md` §18). AI Core Foundation, Provider Abstraction, and Context Engine are
+committed on `main` (`9008348`, `abaac0f`, `bf15665`); the AI Orchestrator is complete but lives
+only on branch `feat/ai-orchestration-layer` (`20084d2`), not yet merged. Sprint 9.3 — HomeNest
+Experience Transformation — is ✅ COMPLETE and, correcting a stale note below, **is committed**
+(`7c4b46c`). Sprint 9.2 (Brand Identity & Design System — `docs/BRAND_FOUNDATION.md`,
 `docs/DESIGN_TOKENS.md`, `docs/COMPONENT_SYSTEM.md`), Sprint 9.1 (Product Integrity), and Sprint
-9.0 (UX & Product Audit, `docs/UX_AUDIT.md`) are all complete, as are Sprints 7.0–8.4. Patch 8.2.1
-(`cart_items` NULL-variant race), Patch 8.2.2 (Navbar cart-badge hydration mismatch), Patch 8.3.1
-(Checkout SSR hydration crash), and Patch 8.3.2 (PaymentIntent concurrency guard) are also
-complete — see below.
+9.0 (UX & Product Audit, `docs/UX_AUDIT.md`) are all complete, as are Sprints 7.0–8.3. **Note — a
+pre-existing inconsistency outside this reconciliation's scope:** this file's own "Sprint 8.4
+Completion Summary (2026-07-19)" below records a real, live, test-mode Stripe charge verified
+end-to-end (order `HN-20260719-0016`), while `docs/ROADMAP.md` and `CLAUDE_CONTEXT.md` still list
+Sprint 8.4 as "proposed, not scoped" with a broader task list (confirmation email, tax, coupons)
+that summary doesn't cover. Left unresolved here — this reconciliation pass is scoped to Sprint 10
+(AI Foundation, ADR-025) only; see the "remaining inconsistencies" note this task's final report
+will carry. Patch 8.2.1 (`cart_items` NULL-variant race), Patch 8.2.2 (Navbar cart-badge hydration
+mismatch), Patch 8.3.1 (Checkout SSR hydration crash), and Patch 8.3.2 (PaymentIntent concurrency
+guard) are also complete — see below.
 
 ## Last Completed
 - ✅ Product Create
@@ -513,16 +524,51 @@ then implemented:
 - Full verification detail: `TESTING.md` §7b. Production build passes; mobile reflow confirmed at
   375×812. Checkout, Cart, Account, and the Order Engine were not touched.
 
+## Sprint 10 Completion Summary (2026-07-22)
+
+Sprint 10 — AI Foundation — **✅ COMPLETE**, retroactively documented via an Architecture
+Documentation Reconciliation pass (this pass touched documentation only, per explicit instruction
+— no application code was modified). Full reasoning: `docs/DECISIONS.md` ADR-025. Full module map:
+`docs/ARCHITECTURE.md` §18.
+
+- **What shipped, prior to this reconciliation pass:** four commits — `feat(ai): create AI Core
+  Foundation` (`9008348`, 2026-07-21), `feat(ai): implement provider abstraction layer`
+  (`abaac0f`, 2026-07-21), `feat(ai): implement context engine foundation` (`bf15665`,
+  2026-07-22) on `main`; `feat(ai): implement AI orchestration layer` (`20084d2`) on branch
+  `feat/ai-orchestration-layer`, not yet merged. Together: AI Core (shared vocabulary + one
+  contract per future concern — context, prompts, memory, guardrails, telemetry, workflows),
+  Provider Abstraction (`AIProvider`/`AIProviderFactory`/`AIProviderRegistry` contracts, no
+  concrete vendor adapter), Context Engine (`DefaultContextEngine`, a real coordinator; no source
+  registered yet), and the AI Orchestrator (`PipelineOrchestrator`/`SequentialPipeline`, a real
+  coordinator; branch-only).
+- **What this reconciliation pass did (2026-07-22):** confirmed the work was intentional (explicit
+  user instruction, not accidental scope drift), wrote `docs/DECISIONS.md` ADR-025, added
+  `docs/ARCHITECTURE.md` §18, updated `CLAUDE_CONTEXT.md` (which had drifted out of date since
+  2026-07-17, missing Sprints 9.0–9.3 and Sprint 10 entirely), updated `docs/ROADMAP.md` (added
+  Sprint 10 to Sprint History, renumbered the original "Sprint 9 — AI Search" sketch to **Sprint
+  11 — AI Runtime & Search Integration** to resolve its collision with the already-shipped Sprint
+  9.0–9.3, and re-sequenced Sprint 11's tasks to build on the Foundation), and this file.
+- **Verified isolated** (2026-07-22, repo-wide grep): zero existing files modified by the four AI
+  commits (every changed file is new, under `src/ai/`), zero new `package.json` dependencies, zero
+  imports of `@/ai` anywhere in `src/app`/`src/components`/`src/lib`. No live model call, no
+  `ANTHROPIC_API_KEY`, no new database table or RLS policy anywhere in this layer.
+- **Not done by this pass, by explicit instruction:** merging `feat/ai-orchestration-layer` into
+  `main` (a code action, out of scope for a documentation-only reconciliation) and implementing
+  any concrete provider, prompt, memory, or guardrail (Sprint 11's job, not started).
+
 ## Current Branch
-main
+main (`feat/ai-orchestration-layer` also exists — one commit ahead, `20084d2`, not merged — see
+Sprint 10 above and ADR-025)
 
 ## Next Task
-Sprint 9.3's implementation is complete but **not yet committed or pushed** — awaiting explicit
-instruction. Beyond that, `docs/UX_AUDIT.md`'s remaining Tier 2–4 items (product colour/variant
-selector, mobile hero logo/stats-bar overlap — still present, unrelated to this sprint — reduced-
-motion support, real Orders/Wishlist data in `/account`) and `docs/ROADMAP.md`'s "Payment
-Activation & Order Notifications" placeholder remain separate, still-unscoped candidates. Do NOT
-start any new work without explicit user instruction.
+This reconciliation pass is documentation-only and complete. The next candidates, none started
+without further explicit instruction: merging `feat/ai-orchestration-layer` into `main`; Sprint
+11 — AI Runtime & Search Integration (Provider Runtime → Prompt Engine → Memory → Guardrails →
+`/api/search`, see `docs/ROADMAP.md` §3); `docs/UX_AUDIT.md`'s remaining Tier 2–4 items (product
+colour/variant selector, mobile hero logo/stats-bar overlap — still present, unrelated to Sprint
+9.3 — reduced-motion support, real Orders/Wishlist data in `/account`); and `docs/ROADMAP.md`'s
+Sprint 8.4 items not covered by the 2026-07-19 Stripe verification pass (see the Known Issues note
+below on that discrepancy). Do NOT start any new work without explicit user instruction.
 
 ## Known Issues
 - ESLint toolchain issue (pre-existing)
@@ -550,6 +596,17 @@ start any new work without explicit user instruction.
   and retry (both reload and same-session) work today; abandoned checkout, explicit cancellation
   (no `payment_intent.canceled` webhook subscription), and client-side payment timeout handling
   are documented but intentionally deferred to Sprint 8.4.
+- **Sprint 8.4 status is inconsistent across documents** (pre-existing, unrelated to AI, not
+  resolved by the 2026-07-22 reconciliation pass since that pass was scoped to Sprint 10 only):
+  this file's own Sprint 8.4 Completion Summary above records a real end-to-end test-mode Stripe
+  charge (2026-07-19), but `docs/ROADMAP.md` and `CLAUDE_CONTEXT.md` still list Sprint 8.4 as
+  "proposed, not scoped" with a broader task list (confirmation email, tax, coupons) that
+  verification pass didn't cover. Needs its own reconciliation pass.
+- **AI Orchestrator not on `main`** — complete but lives only on branch
+  `feat/ai-orchestration-layer` (`20084d2`). Merging is a pending code action (Sprint 10, ADR-025).
+- **Sprint 11 (AI Runtime & Search Integration) has no concrete provider, prompt engine, memory,
+  or guardrail implementation yet** — Sprint 10 shipped contracts and two coordinators only; see
+  `docs/ARCHITECTURE.md` §18.4 for the explicit non-goals of the current AI layer.
 
 ## Do Not Change
 - Design system
@@ -559,7 +616,7 @@ start any new work without explicit user instruction.
 - Existing ADR decisions
 
 ## Long-Term Vision
-HomeNest's long-term direction: an AI-native commerce operating system. The owner eventually only selects products, approves key AI decisions, monitors analytics, and sets strategy — specialized AI agents (Research, Import, Optimization, SEO, Pricing, Image Generation, Marketing, Advertising, Email, Social, Support, Inventory, Analytics, Operations) handle the rest. Strategic guidance only — does not change the current roadmap, does not add AI sprints. Full statement: PROJECT_VISION.md. Recorded as ADR-017 in docs/DECISIONS.md.
+HomeNest's long-term direction: an AI-native commerce operating system. The owner eventually only selects products, approves key AI decisions, monitors analytics, and sets strategy — specialized AI agents (Research, Import, Optimization, SEO, Pricing, Image Generation, Marketing, Advertising, Email, Social, Support, Inventory, Analytics, Operations) handle the rest. Full statement: PROJECT_VISION.md. Recorded as ADR-017 in docs/DECISIONS.md. **Update (2026-07-22, ADR-025):** as of Sprint 10, this is no longer purely strategic guidance with no roadmap effect — the AI Foundation (`src/ai/`) is the first concrete architectural step toward it, added to the roadmap as Sprint 10 (complete) and Sprint 11 (AI Runtime & Search Integration, upcoming) by explicit user instruction. ADR-017 itself is unchanged; ADR-025 records the decision to begin building toward it.
 
 ## Important Documents
 - CLAUDE_CONTEXT.md
@@ -567,6 +624,7 @@ HomeNest's long-term direction: an AI-native commerce operating system. The owne
 - docs/ROADMAP.md
 - docs/DECISIONS.md
 - docs/DATABASE.md
+- docs/ARCHITECTURE.md (§18 — AI Foundation, added 2026-07-22)
 
 ## Notes
 Always read the files above before starting work.

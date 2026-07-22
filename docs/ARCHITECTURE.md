@@ -817,6 +817,8 @@ empty state → Suggest popular problem chips
 
 ## 9. AI Search Architecture
 
+> **Foundation note (2026-07-22, ADR-025):** the Claude integration and prompt shape described below (§9.1–9.3) is the *target feature*, now scoped as **Sprint 11 — AI Runtime & Search Integration**. It will be built as a consumer of the provider-agnostic AI Foundation described in §18 (`src/ai/providers`, `src/ai/context-engine`, `src/ai/orchestration`) rather than a direct, standalone Anthropic SDK call — the Route Handler in §9.1 becomes a thin caller of `AIProvider.complete()` plus the Context Engine's `assemble()`, not a place that builds prompts or talks to Claude itself. Nothing in §9.1–9.3 is implemented yet.
+
 ### 9.1 Claude API Integration
 
 **Model:** `claude-haiku-4-5-20251001` for search (fast, cost-efficient)
@@ -1640,6 +1642,96 @@ Phase 4:     Evaluate: separate AI service on Fly.io if Vercel timeouts hit
 | Payments | Stripe Dashboard | Success rate, failed payments, dispute rate |
 | AI | Custom dashboard (search_logs table) | Query volume, zero-result %, CTR |
 | Errors | Sentry | Client + server exceptions with full stack traces |
+
+---
+
+## 18. AI Foundation Architecture
+
+**Status (2026-07-22):** Landed on `main` as Sprint 10 (ADR-025). Contracts-and-coordinators only — no concrete provider adapter, no live model call, no application code depends on this layer yet. Read alongside `docs/DECISIONS.md` ADR-025 and ADR-011, and `PROJECT_VISION.md`'s AI-native-OS long-term direction (ADR-017).
+
+### 18.1 Why a foundation layer exists before any AI feature
+
+Every module under `src/ai/` exists so a future AI feature — Search (Sprint 11), the disabled `AIAssistantPanel` (Sprint 5.1), or any of the specialized agents `PROJECT_VISION.md` lists (Pricing, SEO, Marketing, Inventory, ...) — is built against one stable, vendor-neutral contract instead of each hand-rolling its own Anthropic SDK call. This mirrors `src/lib/payments/`'s existing shape: one provider-agnostic boundary, one concrete adapter behind it today, room for more without touching callers.
+
+### 18.2 Module map
+
+```
+src/ai/
+├── index.ts            ← Public barrel. Import "@/ai", never a submodule path directly.
+│
+├── shared/              ← Cross-cutting primitives every other module depends on:
+│   └── types.ts            AIMessage, AIResult<T>, AIError, AITokenUsage, AIModelIdentifier,
+│                            AIProviderName. The one place a shared shape is defined.
+│
+├── providers/            ← PROVIDER ABSTRACTION (Sprint 10, complete)
+│   ├── types.ts             AIProvider — the contract a concrete vendor adapter implements
+│   │                        (OpenAI, Anthropic, Google, Ollama — none built yet).
+│   ├── capabilities.ts      AIProviderCapability (e.g. "streaming") — what an adapter supports.
+│   ├── factory.ts           AIProviderFactory — construction contract (config in, AIProvider out).
+│   ├── registry.ts          AIProviderRegistry — discovery contract (register/resolve/list).
+│   ├── metadata.ts          AIProviderMetadata — descriptive record paired with a registration.
+│   ├── resolution.ts        Provider/model resolution helpers.
+│   └── errors.ts             Provider-specific error shapes.
+│
+├── context-engine/       ← CONTEXT ENGINE (Sprint 10, complete — one real coordinator)
+│   ├── engine.ts             DefaultContextEngine — the concrete class. Coordinates:
+│   │                         resolver → sources (by category) → assembler → optional validator.
+│   ├── resolver.ts           AIContextResolver — decides which context categories a request needs.
+│   ├── source.ts             AIContextSource — contract a concrete data source implements.
+│   ├── registry.ts           AIContextSourceRegistry — sources registered per category.
+│   ├── assembler.ts          AIContextAssembler — builds the final AIAssembledContext.
+│   ├── model.ts               AIContextCategory, AIContextFragment.
+│   ├── request.ts / context.ts / validation.ts
+│   │                          Request shape, the immutable assembled result, completeness checks.
+│   └── (no concrete source/resolver/validator registered yet — nothing to gather from
+│        until a feature, e.g. AI Search, supplies them)
+│
+├── orchestration/        ← AI ORCHESTRATOR (Sprint 10, complete — branch `feat/ai-orchestration-layer`,
+│   │                        NOT YET MERGED to `main`; see ADR-025 Consequence)
+│   ├── orchestrator.ts       PipelineOrchestrator — the concrete class. Builds an AIExecutionContext,
+│   │                         runs it through an AIPipeline, emits request-level lifecycle events.
+│   ├── pipeline.ts           SequentialPipeline — runs AIStages in order, threading context forward,
+│   │                         stopping at the first failure. Other execution strategies (parallel,
+│   │                         branching, retries) are meant to be *different AIPipeline
+│   │                         implementations*, not changes to the orchestrator.
+│   ├── stage.ts               AIStage — contract a single pipeline step implements.
+│   ├── context.ts             AIExecutionContext + createExecutionContext().
+│   ├── cancellation.ts        AICancellationToken — cooperative cancellation, checked between stages.
+│   ├── events.ts / errors.ts / outcome.ts / request.ts
+│   │                          Lifecycle events, error shape, per-stage outcome, run request shape.
+│   └── (no concrete stage exists yet for any feature)
+│
+├── context/ prompts/ memory/ guardrails/ telemetry/ workflows/
+│   ← AI CORE FOUNDATION (Sprint 10, complete). Each is a single `types.ts` (contract only) behind
+│     an `index.ts` barrel — no runtime implementation in any of these six modules yet:
+│   - context/    — AIContextFragment-adjacent shared context types (distinct from context-engine/)
+│   - prompts/    — a prompt template's contract (Sprint 11: "Prompt Engine" gives this a real
+│                   implementation — system/user template assembly, per §9.1's prompt sketch)
+│   - memory/     — a memory record's contract (Sprint 11: "Memory" — conversation/session state)
+│   - guardrails/ — a guardrail policy's contract (Sprint 11: "Guardrails" — output/safety checks)
+│   - telemetry/  — an AI usage/event record's contract (no sprint scheduled yet)
+│   - workflows/  — a multi-step workflow's contract, distinct from orchestration/'s pipeline
+│                   (a workflow describes *what* a feature does step-by-step; the orchestrator
+│                   + pipeline describe *how* any request, workflow or not, actually executes)
+```
+
+### 18.3 Design patterns in use
+
+- **Factory Method** (`providers/factory.ts`) — one seam for "which adapter class for this config," instead of `if (name === "openai") ... else if (name === "anthropic")` scattered across call sites.
+- **Registry/Service Locator** (`providers/registry.ts`, `context-engine/registry.ts`) — discovery without the discoverer knowing concrete implementations; neither registry contract imports a single concrete provider or source.
+- **Strategy** (`AIPipeline` implementations, `AIContextResolver`/`AIContextAssembler` implementations) — the Open/Closed seam of this whole layer: to change *how* something executes or resolves, add an implementation; to change *what* runs, add stages/sources.
+- **Result type over exceptions** (`AIResult<T>`, `src/ai/shared/types.ts`) — every fallible operation (a provider call, a context assembly, a pipeline stage) returns `{ ok: true, value }` or `{ ok: false, error }` rather than throwing, so a caller's error handling is uniform across the whole layer.
+
+### 18.4 Explicit non-goals of this layer (today)
+
+- No concrete provider adapter (no `AnthropicProvider` class, no `@anthropic-ai/sdk` dependency — confirmed absent from `package.json`).
+- No live API call, no cost, no `ANTHROPIC_API_KEY` usage anywhere (confirmed absent from `.env.local`).
+- No UI, Route Handler, or Server Action imports `@/ai` yet (`grep -rn "@/ai" src/app src/components src/lib` — zero matches, verified 2026-07-22).
+- No new database table or RLS policy — this layer has no persistence of its own yet; `memory/` and `telemetry/` are contracts a future concrete store (Supabase-backed or otherwise) will implement.
+
+### 18.5 What Sprint 11 builds on top of this
+
+See §9 above for the target AI Search feature shape. In Foundation terms, Sprint 11 is: implement `AnthropicProvider` (Provider Runtime) → implement a concrete prompt assembler (Prompt Engine) → implement concrete `memory`/`guardrails` stores → register a Context Engine source for the product catalogue → wire `/api/search` to call `AIOrchestrator.run()` with a pipeline of stages (assemble context → render prompt → call provider → validate/guard output) instead of any of these being built ad hoc inside the Route Handler itself.
 
 ---
 

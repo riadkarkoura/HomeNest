@@ -18,22 +18,47 @@ Brand: premium, minimal, warm, helpful. Inspired by Apple simplicity and IKEA us
 
 ## Long-Term Architectural Note
 
-HomeNest's long-term vision (not the current roadmap) is an **AI-native commerce operating system** — the owner eventually only selects products, approves key AI decisions, monitors analytics, and sets strategy; specialized agents (Product Research, Import, Optimization, SEO, Pricing, Image Generation, Marketing, Advertising, Email, Social, Support, Inventory, Analytics, Operations) handle the rest. Full statement: `PROJECT_VISION.md`. Recorded as ADR-017 in `docs/DECISIONS.md`.
+HomeNest's long-term vision is an **AI-native commerce operating system** — the owner eventually only selects products, approves key AI decisions, monitors analytics, and sets strategy; specialized agents (Product Research, Import, Optimization, SEO, Pricing, Image Generation, Marketing, Advertising, Email, Social, Support, Inventory, Analytics, Operations) handle the rest. Full statement: `PROJECT_VISION.md`. Recorded as ADR-017 in `docs/DECISIONS.md`.
 
-**Practical effect now:** favor a clean server-side entry point a future AI agent could call over a human-only UI flow with no equivalent path in. This does **not** change the current roadmap and does **not** authorize building any AI feature ahead of its scheduled sprint.
+**Practical effect now:** favor a clean server-side entry point a future AI agent could call over a human-only UI flow with no equivalent path in.
+
+**Update (2026-07-22, ADR-025):** this vision has begun being built toward, by explicit user instruction — **Sprint 10 — AI Foundation** (provider-agnostic contracts + Context Engine + AI Orchestrator, see `docs/ARCHITECTURE.md` §18) shipped ahead of any concrete AI feature, specifically so AI Search (now Sprint 11) and every future agent in the list above share one contract instead of each hand-rolling a vendor SDK call. This is a deliberate architectural decision, not a relaxation of the "don't build ahead of an explicit instruction" posture that produced the sentence above — see ADR-025 for the full reasoning. Sprint 11 (AI Search) still has not started.
 
 ---
 
 ## Current Project Status
 
 **Version:** 0.1.0  
-**Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress.  
-**Last sprint completed:** Sprint 8.3 — Stripe Payment Architecture (hardening: card-only PaymentIntents, webhook ordering guard, PaymentIntent reuse, non-2xx-on-failure); Sprint 8.2 (Order Engine Hardening) and Patches 8.2.1/8.2.2 precede it.  
-**Date of last update:** 2026-07-17
+**Phase:** Phase 0 complete (frontend). Phase 1 (backend) in progress. Phase 2 (AI) foundation-laying begun — Sprint 10 complete.  
+**Last sprint completed:** Sprint 10 — AI Foundation (AI Core, Provider Abstraction, Context Engine on `main`; AI Orchestrator on branch `feat/ai-orchestration-layer`, not yet merged — see ADR-025). Preceded by Sprints 9.0–9.3 (UX Audit → Product Integrity → Brand Identity & Design System → Landing Page Transformation) and Sprints 7.0–8.3 (auth, account hub, cart, checkout, order engine, Stripe hardening).  
+**Date of last update:** 2026-07-22 (documentation reconciliation — see ADR-025; this file had drifted out of date between 2026-07-17 and today, missing Sprints 9.0–9.3 and Sprint 10 entirely until this update)
 
 ---
 
 ## Current Sprint
+
+**Sprint 10 — AI Foundation** ✅ COMPLETE (retroactively documented 2026-07-22, ADR-025)
+
+Four commits — `feat(ai): create AI Core Foundation` (`9008348`), `feat(ai): implement provider abstraction layer` (`abaac0f`), `feat(ai): implement context engine foundation` (`bf15665`) on `main`, plus `feat(ai): implement AI orchestration layer` (`20084d2`) on branch `feat/ai-orchestration-layer` — built HomeNest's first concrete AI architecture layer under `src/ai/`, ahead of any concrete AI feature. Full module map: `docs/ARCHITECTURE.md` §18. Full reasoning (why now, why before AI Search, why not scope drift): `docs/DECISIONS.md` ADR-025.
+
+- **AI Core Foundation** — shared vocabulary + one contract per future concern (`context`, `prompts`, `memory`, `guardrails`, `telemetry`, `workflows`). Types only.
+- **Provider Abstraction** (`src/ai/providers`) — the `AIProvider` contract every vendor adapter will implement, plus factory/registry/capability contracts. No concrete adapter built yet.
+- **Context Engine** (`src/ai/context-engine`) — `DefaultContextEngine`, a real coordinator (resolver → sources → assembler → optional validator). No source registered yet.
+- **AI Orchestrator** (`src/ai/orchestration`) — `PipelineOrchestrator` + `SequentialPipeline`, a real coordinator for staged AI requests with lifecycle events and cooperative cancellation. **On `feat/ai-orchestration-layer` only — not yet merged to `main`.**
+- Verified isolated (2026-07-22): no existing file modified, no new `package.json` dependency, zero `@/ai` imports anywhere in `src/app`/`src/components`/`src/lib`. No live model call anywhere in this layer.
+- **Not done yet:** merging the orchestration branch into `main` (a code action, out of scope for this documentation-only reconciliation pass).
+
+---
+
+## Previous Sprint
+
+**Sprints 9.0–9.3 — UX Audit, Product Integrity, Brand Identity & Design System, Landing Page Transformation** ✅ COMPLETE (2026-07-19–21)
+
+Unrelated to AI — a UX/product initiative. Sprint 9.0 produced `docs/UX_AUDIT.md` (full page-by-page audit, Tier 1–4 findings). Sprint 9.1 fixed the Tier 1 findings live: cart shipping consistency, working navbar search (`getProducts()` gained a `q` filter), a real "Buy Now" flow, all `href="#"` dead links removed, branding cleanup (site no longer describes a furniture store). Sprint 9.2 produced three planning documents — `docs/BRAND_FOUNDATION.md`, `docs/DESIGN_TOKENS.md`, `docs/COMPONENT_SYSTEM.md` — no code. Sprint 9.3 implemented the landing page transformation: `AIConsultantSection` (replaces "AI Smart Search," runs on Sprint 9.1's keyword-match logic only, no AI backend, by explicit instruction), a new "How It Works" section, Recommended Solutions renaming, `PhilosophySection`/`SmartSearchSection` deleted outright. Full detail: `SESSION.md`'s Sprint 9.0–9.3 completion summaries, `TESTING.md` §7a/§7b.
+
+---
+
+## Earlier Sprint
 
 **Sprint 8.3 — Stripe Payment Architecture (Hardening)** ✅ COMPLETE
 
@@ -135,6 +160,8 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint 8.1 | **Checkout UI & Flow Hardening** — `CheckoutSteps.tsx` (visual step indicator, guidance only, no navigation added), a `CheckoutClient`-local hydration guard using Zustand's own `useCartStore.persist.hasHydrated()`/`onFinishHydration()` (no change to `store.ts`'s public API) plus a new `CheckoutSkeleton.tsx`, server-side Zod validation on `createOrder()` with `shippingMethodId`'s enum derived from `SHIPPING_OPTIONS` at runtime (never hand-typed, so it can't drift), per-section inline validation hints, and loading-state polish on `CheckoutPayment.tsx`/`CheckoutIdentify.tsx`. No new schema, no new Server Actions, no DAL changes. |
 | Sprint 8.2 | **Order Engine Hardening (Atomicity & Concurrency)** — `create_order_atomic()` Postgres function (migration `20260716000001_order_engine_atomic.sql`, `SECURITY INVOKER`, ADR-023) replaces `createOrder()`'s three sequential calls with one transactional write; a `SELECT ... FOR UPDATE` lock on the target cart prevents two near-simultaneous checkout requests for the same customer from racing, and reusing `carts.converted_order_id` makes a resubmission idempotent. Business logic (validation, pricing, snapshot-building) stays in TypeScript — the function does only the final write. `createOrder()`'s public contract, `CheckoutClient.tsx`, and the DAL are all unchanged. |
 | Sprint 8.3 | **Stripe Payment Architecture (Hardening, ADR-024)** — card-only PaymentIntents (`payment_method_types: ["card"]`), PaymentIntent reuse/idempotency in `/api/payments/stripe/intent`, a webhook ordering guard (`apply_stripe_payment_result()` now refuses to downgrade an already-`paid` order, migration `20260716000003_stripe_webhook_ordering_guard.sql`), and non-2xx responses from `/api/webhooks/stripe` on RPC failure so Stripe's retry mechanism actually engages. Stripe Elements/Payment Element ratified over Stripe Checkout. Failed-payment path (declined card, retries, out-of-order events) documented in `TESTING.md` §6; abandoned checkout/cancellation/timeout intentionally deferred to Sprint 8.4. No other payment provider added, Order Engine untouched. |
+| Sprints 9.0–9.3 | **UX Audit → Product Integrity → Brand Identity & Design System → Landing Page Transformation** — `docs/UX_AUDIT.md`; Tier 1 fixes (cart shipping consistency, working navbar search, real "Buy Now," dead-link removal, branding cleanup); `docs/BRAND_FOUNDATION.md`/`docs/DESIGN_TOKENS.md`/`docs/COMPONENT_SYSTEM.md` (planning only); `AIConsultantSection` + "How It Works" + Recommended Solutions renaming, `PhilosophySection`/`SmartSearchSection` deleted. Unrelated to AI despite the section name — runs on keyword-match logic only. |
+| Sprint 10 | **AI Foundation** (ADR-025) — provider-agnostic AI Core (`src/ai/shared`/`context`/`prompts`/`memory`/`guardrails`/`telemetry`/`workflows`, contracts only), Provider Abstraction (`src/ai/providers` — `AIProvider`/`AIProviderFactory`/`AIProviderRegistry` contracts, no concrete adapter), Context Engine (`src/ai/context-engine` — `DefaultContextEngine`, a real coordinator, no source registered yet), and AI Orchestrator (`src/ai/orchestration` — `PipelineOrchestrator`/`SequentialPipeline`, a real coordinator; **on branch `feat/ai-orchestration-layer`, not yet merged to `main`**). Zero existing files touched, zero new dependencies, zero imports of `@/ai` anywhere in the app yet — verified isolated. See `docs/ARCHITECTURE.md` §18. |
 
 ---
 
@@ -143,9 +170,9 @@ The originally-planned single "Sprint 7 — Full Authentication" was split into 
 | Sprint | Goal |
 |---|---|
 | Sprint 8.4 | Payment Activation & Order Notifications — configure real Stripe keys and verify a live test-mode charge end-to-end (the integration is fully coded and hardened, see Sprint 8.3 above), order confirmation email (Resend), tax calculation (currently hardcoded to 0), coupon redemption UI at checkout (`coupons`/`coupon_redemptions` tables already exist), plus the Sprint 8.3 deferred failed-payment items: `payment_intent.canceled` webhook subscription and client-side payment timeout handling |
-| Sprint 9 | AI Smart Search — Claude API, Upstash Redis cache, search logs. Also wires the Sprint 5.1 `AIAssistantPanel` and adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018) |
+| Sprint 11 | **AI Runtime & Search Integration** (supersedes the original "Sprint 9 — AI Search" — renumbered, see ADR-025) — builds on Sprint 10's AI Foundation rather than a standalone Anthropic SDK call: Provider Runtime (concrete `AnthropicProvider`), Prompt Engine, Memory, Guardrails (each completes one of Sprint 10's contract-only modules), then `POST /api/search`, Upstash Redis cache, wiring `AIConsultantSection` from keyword-match to the live route, `search_logs`, AI Studio search quality section, and the Sprint 5.1 `AIAssistantPanel`. Also adds AI-assisted content quality analysis to `ProductQualitySection` (the deterministic scoring shipped in Sprint 6.1 remaining stays as the non-AI baseline — see ADR-018). **Prerequisite not yet done:** merge `feat/ai-orchestration-layer` into `main`. |
 
-**Do NOT implement** Sprint 8.4's Stripe activation or AI search until the relevant sprint begins.
+**Do NOT implement** Sprint 8.4's Stripe activation or Sprint 11's AI runtime/search work until the relevant sprint begins. (Sprint 10's AI Foundation is the one exception already shipped, per explicit instruction — see ADR-025.)
 
 ---
 
@@ -233,8 +260,24 @@ src/
 │   ├── store.ts            ← Zustand cart store
 │   └── utils.ts             ← cn() utility
 │
-└── types/
-    └── index.ts          ← All TypeScript types + future feature stubs
+├── types/
+│   └── index.ts          ← All TypeScript types + future feature stubs
+│
+└── ai/                    ← AI Foundation (Sprint 10, ADR-025) — contracts + two coordinators, no
+                              concrete provider, no live call, not imported by any app code yet.
+                              Import via the "@/ai" barrel, never a submodule path directly.
+                              Full module map: docs/ARCHITECTURE.md §18.
+    ├── index.ts            ← Public barrel — re-exports every submodule below
+    ├── shared/             ← AIMessage/AIResult/AIError/AITokenUsage — cross-cutting vocabulary
+    ├── providers/          ← AIProvider contract, factory/registry/capability contracts — no
+                               concrete vendor adapter (Anthropic or otherwise) yet — Sprint 11
+    ├── context-engine/     ← DefaultContextEngine (real coordinator) + resolver/source/registry/
+                               assembler/validation contracts — no source registered yet
+    ├── context/ prompts/ memory/ guardrails/ telemetry/ workflows/
+    │                       ← one types.ts contract each, no runtime implementation — Sprint 11
+                               completes prompts (Prompt Engine), memory, and guardrails
+    └── orchestration/      ← PipelineOrchestrator + SequentialPipeline (real coordinators) — on
+                               branch `feat/ai-orchestration-layer` ONLY, not merged to `main` yet
 ```
 
 ---
@@ -274,9 +317,15 @@ src/
 
 | Feature | Status | Sprint |
 |---|---|---|
-| Smart Search (Claude API) | Not started | Sprint 9 |
-| AI Studio (admin) | Stub page exists | Sprint 9+ |
-| AI Product Assistant (`/admin/products/new`) | Disabled UI panel exists (Sprint 5.1) — 6 buttons: Import from AliExpress, Generate Product Story, Generate SEO, Generate FAQs, Generate TikTok Content, Generate Product Images | Sprint 9 |
+| AI Foundation (`src/ai/` — Core, Provider Abstraction, Context Engine) | ✅ Complete on `main` — contracts + `DefaultContextEngine`, no concrete provider, no live call | Sprint 10 (ADR-025) |
+| AI Orchestrator (`src/ai/orchestration`) | ✅ Complete, but on branch `feat/ai-orchestration-layer` — **not merged to `main`** | Sprint 10 (ADR-025) |
+| Provider Runtime (concrete `AnthropicProvider`) | Not started — no `@anthropic-ai/sdk` dependency, no `ANTHROPIC_API_KEY` | Sprint 11 |
+| Prompt Engine (concrete `prompts` implementation) | Not started — contract only | Sprint 11 |
+| Memory (concrete `memory` implementation) | Not started — contract only | Sprint 11 |
+| Guardrails (concrete `guardrails` implementation) | Not started — contract only | Sprint 11 |
+| Smart Search (Claude API, `/api/search`) | Not started — `AIConsultantSection` (Sprint 9.3) runs on keyword-match only | Sprint 11 |
+| AI Studio (admin) | Stub page exists | Sprint 11+ |
+| AI Product Assistant (`/admin/products/new`) | Disabled UI panel exists (Sprint 5.1) — 6 buttons: Import from AliExpress, Generate Product Story, Generate SEO, Generate FAQs, Generate TikTok Content, Generate Product Images | Sprint 11 |
 | Product content generation | Not started | Future |
 | Personalised recommendations | Not started | Future |
 
@@ -329,14 +378,15 @@ src/
 
 ## Next Priority
 
-**Sprints 7.0 through 8.3 are all complete.** Customer auth, the `/account` hub, cart/session continuity, checkout, the Order Engine (atomic + concurrency-safe), and Stripe payment architecture hardening are all real, live, and verified. What's left, in rough priority order:
+**Sprints 7.0 through 10 are all complete** (Sprint 10 — AI Foundation — retroactively documented 2026-07-22, see ADR-025). Customer auth, the `/account` hub, cart/session continuity, checkout, the Order Engine (atomic + concurrency-safe), Stripe payment architecture hardening, the Sprint 9.0–9.3 UX/landing-page initiative, and the AI Foundation contracts/coordinators are all real and either live or (for the AI layer) isolated-and-verified. What's left, in rough priority order:
 
 - A dedicated Media Library so a previously-uploaded image can be reused across products, rather than uploaded fresh each time (not yet scheduled to a sprint)
 - **Sprint 8.4 — Payment Activation & Order Notifications**: configure real Stripe keys, verify a live test-mode charge end-to-end, order confirmation email, tax calculation, coupon redemption UI, plus Sprint 8.3's deferred failed-payment items (`payment_intent.canceled`, client-side timeout). Not yet scoped with an implementation plan.
-- **Sprint 9 — AI Smart Search.**
+- **Merge `feat/ai-orchestration-layer` into `main`** — the Orchestrator is complete but not yet on `main` (a code action, not part of the 2026-07-22 documentation reconciliation).
+- **Sprint 11 — AI Runtime & Search Integration** (supersedes the original "Sprint 9 — AI Search"): Provider Runtime, Prompt Engine, Memory, Guardrails, then `/api/search` and the rest of the original Sprint 9 task list.
 
-Do NOT start Sprint 8.4's work without explicit user instruction.
+Do NOT start Sprint 8.4's or Sprint 11's work without explicit user instruction.
 
 ---
 
-*Last updated: 2026-07-17*
+*Last updated: 2026-07-22 — documentation reconciliation for Sprint 10 (AI Foundation), see ADR-025. Previously last updated 2026-07-17; Sprints 9.0–9.3 and Sprint 10 were missing from this file entirely until this update.*
