@@ -8,8 +8,9 @@
  * integration and no business logic — only the shared vocabulary and
  * interfaces every future AI feature is built against, plus the
  * provider-agnostic runtime engines that coordinate a request through its
- * lifecycle (orchestration) and assemble the context it needs beforehand
- * (context engine).
+ * lifecycle (orchestration), assemble the context it needs beforehand
+ * (context engine), and turn that context into a provider-ready prompt
+ * (prompt engine).
  *
  * Consumers should import from `@/ai` rather than reaching into a
  * specific submodule directly, so this barrel — not the underlying file
@@ -25,3 +26,4 @@ export * from "./guardrails";
 export * from "./telemetry";
 export * from "./orchestration";
 export * from "./context-engine";
+export * from "./prompt-engine";
